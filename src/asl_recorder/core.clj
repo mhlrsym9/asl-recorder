@@ -26,6 +26,15 @@
 (def attacker-map {"German" "Russian"
                    "Russian" "German"})
 
+(def game-zip-loc (atom (-> (xml/element :game {:name "War of the Rats" :number-turns "6" :side1 "German" :side2 "Russian"}
+                                         (xml/element :turn {:number 1}
+                                                      (xml/element :side {:attacker "German"}
+                                                                   (xml/element :phase {:name "Rally"}))))
+                            zip/xml-zip
+                            zip/down
+                            zip/down
+                            zip/down)))
+
 (defn- process-the-game [e])
 
 (defn- inc-turn [turn]
@@ -59,6 +68,16 @@
                             (sc/text turn))]
             (update-time turn next-turn attacker next-attacker phase next-phase))))
 
+(defn append-event [loc the-event]
+  (let [n (zip/node loc)
+        c (conj (:content n) (xml/element :event {} the-event))]
+    (zip/replace loc (assoc n :content c))))
+
+(defn- add-event [event]
+  (fn [_]
+    (swap! game-zip-loc append-event (sc/text event))
+    (sc/text! event "")))
+
 (defn -main
   [& args]
   (sc/invoke-later
@@ -68,16 +87,19 @@
                       (sc/button :id :advance-attacker-button :text "Next attacker")
                       (sc/label :id :phase :text "Rally")
                       (sc/button :id :advance-phase-button :text "Next phase")
+                      (sc/text :id :event)
+                      (sc/button :id :add-event-button :text "Add event")
                       (sc/button :id :ok :text "OK" :enabled? false)]
                      (let [ok-fn (fn [e] (process-the-game e))]
                        (sc/listen advance-turn-button :action (advance-turn turn attacker phase))
                        (sc/listen advance-attacker-button :action (advance-attacker turn attacker phase))
                        (sc/listen advance-phase-button :action (advance-phase turn attacker phase))
+                       (sc/listen add-event-button :action (add-event event))
                        (sc/listen ok :action ok-fn)
                        (-> (sc/frame :title "ASL Recorder",
-                                     :content (sm/mig-panel :constraints [] :items [["Turn:"] [turn "w 200!"] [advance-turn-button "wrap"]
-                                                                                    ["Attacker:"] [attacker "w 200!"] [advance-attacker-button "wrap"]
-                                                                                    ["Phase:"] [phase "w 200!"] [advance-phase-button "wrap"]
+                                     :content (sm/mig-panel :constraints [] :items [["Turn:"] [turn "w 100!"] ["Attacker:"] [attacker "w 100!"] ["Phase:"] [phase "w 100!, wrap"]
+                                                                                    [advance-turn-button "span 2, align center"] [advance-attacker-button "span 2, align center"] [advance-phase-button "span 2, align center, wrap"]
+                                                                                    ["Event:"] [event "span 4, growx"] [add-event-button "wrap"]
                                                                                     [ok "span, align center"]]),
                                      :on-close :exit)
                            sc/pack!
