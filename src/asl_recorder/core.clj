@@ -37,8 +37,8 @@
 
 (defn- process-the-game [e])
 
-(defn- inc-turn [turn]
-  (inc (Integer/parseInt (sc/text turn))))
+(defn- inc-turn [the-turn]
+  (inc (Integer/parseInt the-turn)))
 
 (defn- update-time [turn next-turn attacker next-attacker phase next-phase]
   (sc/text! turn next-turn)
@@ -55,14 +55,14 @@
   (let [l (zip/up loc)
         n (zip/node l)
         c (conj (:content n) (xml/element :phase {:name the-phase}))]
-    (zip/replace l (assoc n :content c))))
+    (-> l (zip/replace (assoc n :content c)) zip/down)))
 
 (defn append-attacker [loc the-attacker]
   (let [l (-> loc zip/up zip/up)
         n (zip/node l)
         c (conj (:content n) (xml/element :side {:attacker the-attacker}
                                           (xml/element :phase {:name "Rally"})))]
-    (zip/replace l (assoc n :content c))))
+    (-> l (zip/replace (assoc n :content c)) zip/down zip/down)))
 
 (defn append-turn [loc the-turn]
   (let [l (-> loc zip/up zip/up zip/up)
@@ -70,40 +70,71 @@
         c (conj (:content n) (xml/element :turn {:number the-turn}
                                           (xml/element :side {:attacker "German"}
                                                        (xml/element :phase {:name "Rally"}))))]
-    (zip/replace l (assoc n :content c))))
+    (-> l (zip/replace (assoc n :content c)) zip/down zip/down zip/down)))
 
-(defn- advance-turn [turn attacker phase]
-  (fn [_] (let [next-turn (inc-turn turn)]
-            (update-time turn next-turn attacker "German" phase "Rally"))))
+(defn get-game-phase [loc]
+  (-> loc zip/node :attrs :name))
 
-(defn- advance-attacker [turn attacker phase]
-  (fn [_] (let [next-attacker (get attacker-map (sc/text attacker))
-                next-turn (if (= next-attacker "German")
-                            (inc-turn turn)
-                            (sc/text turn))]
-            (update-time turn next-turn attacker next-attacker phase "Rally"))))
+(defn get-game-attacker [loc]
+  (-> loc zip/up zip/node :attrs :attacker))
 
-(defn- advance-phase [turn attacker phase]
-  (fn [_] (let [next-phase (get phase-map (sc/text phase))
-                current-attacker (sc/text attacker)
-                next-attacker? (= next-phase "Rally")
-                next-attacker (if next-attacker?
-                                (get attacker-map current-attacker)
-                                current-attacker)
-                next-turn? (and next-attacker? (= next-attacker "German"))
-                next-turn (if next-turn?
-                            (inc-turn turn)
-                            (sc/text turn))]
-            (cond next-turn? (swap! game-zip-loc append-turn next-turn)
-                  next-attacker? (swap! game-zip-loc append-attacker next-attacker)
-                  :else (swap! game-zip-loc append-phase next-phase))
-            (update-time turn next-turn attacker next-attacker phase next-phase))))
+(defn get-game-turn [loc]
+  (-> loc zip/up zip/up zip/node :attrs :number))
 
 (defn- add-event [action result]
   (fn [_]
     (swap! game-zip-loc append-event (sc/text action) (sc/text result))
     (sc/text! action "")
     (sc/text! result "")))
+
+(defn advance-game-phase [loc]
+  (let [current-phase (get-game-phase loc)
+        next-phase (get phase-map current-phase)
+        current-attacker (get-game-attacker loc)
+        next-attacker? (= next-phase "Rally")
+        next-attacker (if next-attacker?
+                        (get attacker-map current-attacker)
+                        current-attacker)
+        current-turn (get-game-turn loc)
+        next-turn? (and next-attacker? (= next-attacker "German"))
+        next-turn (if next-turn?
+                    (inc-turn current-turn)
+                    current-turn)
+        new-loc (cond next-turn? (append-turn loc next-turn)
+                      next-attacker? (append-attacker loc next-attacker)
+                      :else (append-phase loc next-phase))]
+    {:next-turn next-turn :next-attacker next-attacker :next-phase next-phase :new-loc new-loc}))
+
+(defn advance-game-attacker [loc]
+  (let [current-attacker (get-game-attacker loc)]
+    (loop [{:keys [next-attacker next-phase new-loc] :as r}
+           {:next-turn (get-game-turn loc) :next-attacker current-attacker :next-phase (get-game-phase loc) :new-loc loc}]
+      (if (and (= "Rally" next-phase) (not= current-attacker next-attacker))
+        r
+        (recur (advance-game-phase new-loc))))))
+
+(defn advance-game-turn [loc]
+  (let [current-turn (get-game-turn loc)]
+    (loop [{:keys [next-turn next-attacker new-loc] :as r}
+           {:next-turn current-turn :next-attacker (get-game-attacker loc) :next-phase (get-game-phase loc) :new-loc loc}]
+      (if (and (= "German" next-attacker) (not= current-turn next-turn))
+        r
+        (recur (advance-game-phase new-loc))))))
+
+(defn- advance-phase [turn attacker phase]
+  (fn [_] (let [{:keys [next-turn next-attacker next-phase new-loc]} (advance-game-phase @game-zip-loc)]
+            (reset! game-zip-loc new-loc)
+            (update-time turn next-turn attacker next-attacker phase next-phase))))
+
+(defn- advance-attacker [turn attacker phase]
+  (fn [_] (let [{:keys [next-turn next-attacker next-phase new-loc]} (advance-game-attacker @game-zip-loc)]
+            (reset! game-zip-loc new-loc)
+            (update-time turn next-turn attacker next-attacker phase next-phase))))
+
+(defn- advance-turn [turn attacker phase]
+  (fn [_] (let [{:keys [next-turn next-attacker next-phase new-loc]} (advance-game-turn @game-zip-loc)]
+            (reset! game-zip-loc new-loc)
+            (update-time turn next-turn attacker next-attacker phase next-phase))))
 
 (defn -main
   [& args]

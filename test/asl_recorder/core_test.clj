@@ -32,3 +32,22 @@
           fp (-> new-loc zip/root zip/xml-zip zip/node :content)]
       (is (= 2 (-> fp first :attrs :number)))
       (is (= 1 (-> fp second :attrs :number))))))
+
+(deftest test-get-current-game-turn
+  (testing "Try to get the current game turn."
+    (is (= 1 (get-game-turn @game-zip-loc)))))
+
+(deftest test-get-current-game-attacker
+  (testing "Try to get the current game attacker."
+    (is (= "German" (get-game-attacker @game-zip-loc)))))
+
+(deftest test-get-current-game-phase
+  (testing "Try to get the current game phase."
+    (is (= "Rally" (get-game-phase @game-zip-loc)))))
+
+(deftest test-advance-game-phase
+  (testing "Try out advance-game-phase"
+    (let [{new-loc :new-loc} (advance-game-phase @game-zip-loc)
+          {new-loc-2 :new-loc} (advance-game-phase new-loc)]
+      (is (= "Movement" (get-game-phase new-loc-2)))
+      (is (= 3 (count (-> new-loc-2 zip/up zip/node :content)))))))
