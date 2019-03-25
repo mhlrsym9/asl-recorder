@@ -16,22 +16,22 @@
   (testing "Try to add a phase."
     (let [new-loc (append-phase @game-zip-loc "Prep Fire")
           fp (-> new-loc zip/root zip/xml-zip zip/down zip/down zip/node :content)]
-      (is (= "Prep Fire" (-> fp first :attrs :name)))
-      (is (= "Rally" (-> fp second :attrs :name))))))
+      (is (= "Prep Fire" (-> fp second :attrs :name)))
+      (is (= "Rally" (-> fp first :attrs :name))))))
 
 (deftest test-append-attacker
   (testing "Try to add an attacker."
     (let [new-loc (append-attacker @game-zip-loc "Russian")
           fp (-> new-loc zip/root zip/xml-zip zip/down zip/node :content)]
-      (is (= "Russian" (-> fp first :attrs :attacker)))
-      (is (= "German" (-> fp second :attrs :attacker))))))
+      (is (= "Russian" (-> fp second :attrs :attacker)))
+      (is (= "German" (-> fp first :attrs :attacker))))))
 
 (deftest test-append-turn
   (testing "Try to add an turn."
     (let [new-loc (append-turn @game-zip-loc 2)
           fp (-> new-loc zip/root zip/xml-zip zip/node :content)]
-      (is (= 2 (-> fp first :attrs :number)))
-      (is (= 1 (-> fp second :attrs :number))))))
+      (is (= 2 (-> fp second :attrs :number)))
+      (is (= 1 (-> fp first :attrs :number))))))
 
 (deftest test-get-current-game-turn
   (testing "Try to get the current game turn."

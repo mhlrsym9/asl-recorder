@@ -14,6 +14,18 @@
            [javax.swing JFrame SwingWorker SwingWorker$StateValue JOptionPane])
   (:gen-class))
 
+(def rally-phase-map {"Reinforcements" "ATTACKER Recovery"
+                      "ATTACKER Recovery" "DEFENDER Recovery"
+                      "DEFENDER Recovery" "ATTACKER Repair"
+                      "ATTACKER Repair" "DEFENDER Repair"
+                      "DEFENDER Repair" "ATTACKER Transfer"
+                      "ATTACKER Transfer" "DEFENDER Transfer"
+                      "DEFENDER Transfer" "ATTACKER Self-Rally"
+                      "ATTACKER Self-Rally" "DEFENDER Self-Rally"
+                      "DEFENDER Self-Rally" "ATTACKER Unit Rally"
+                      "ATTACKER Unit Rally" "DEFENDER Unit Rally"
+                      "DEFENDER Unit Rally" "Reinforcements"})
+
 (def phase-map {"Rally" "Prep Fire"
                 "Prep Fire" "Movement"
                 "Movement" "Defensive Fire"
@@ -26,19 +38,21 @@
 (def attacker-map {"German" "Russian"
                    "Russian" "German"})
 
-(def game-zip-loc (atom (-> (xml/element :game {:name "War of the Rats" :number-turns "6" :side1 "German" :side2 "Russian"}
-                                         (xml/element :turn {:number 1}
-                                                      (xml/element :side {:attacker "German"}
-                                                                   (xml/element :phase {:name "Rally"}))))
+(def game (xml/element :game {:name "War of the Rats" :number-turns "6" :side1 "German" :side2 "Russian"}
+                       (xml/element :turn {:number 1}
+                                    (xml/element :side {:attacker "German"}
+                                                 (xml/element :phase {:name "Rally"})))))
+
+(def game-zip-loc (atom (-> game
                             zip/xml-zip
                             zip/down
+                            zip/rightmost
                             zip/down
-                            zip/down)))
+                            zip/rightmost
+                            zip/down
+                            zip/rightmost)))
 
 (defn- process-the-game [e])
-
-(defn- inc-turn [the-turn]
-  (inc (Integer/parseInt the-turn)))
 
 (defn- update-time [turn next-turn attacker next-attacker phase next-phase]
   (sc/text! turn next-turn)
@@ -54,23 +68,23 @@
 (defn append-phase [loc the-phase]
   (let [l (zip/up loc)
         n (zip/node l)
-        c (conj (:content n) (xml/element :phase {:name the-phase}))]
-    (-> l (zip/replace (assoc n :content c)) zip/down)))
+        c (conj (vec (:content n)) (xml/element :phase {:name the-phase}))]
+    (-> l (zip/replace (assoc n :content c)) zip/down zip/rightmost)))
 
 (defn append-attacker [loc the-attacker]
   (let [l (-> loc zip/up zip/up)
         n (zip/node l)
-        c (conj (:content n) (xml/element :side {:attacker the-attacker}
+        c (conj (vec (:content n)) (xml/element :side {:attacker the-attacker}
                                           (xml/element :phase {:name "Rally"})))]
-    (-> l (zip/replace (assoc n :content c)) zip/down zip/down)))
+    (-> l (zip/replace (assoc n :content c)) zip/down zip/rightmost zip/down zip/rightmost)))
 
 (defn append-turn [loc the-turn]
   (let [l (-> loc zip/up zip/up zip/up)
         n (zip/node l)
-        c (conj (:content n) (xml/element :turn {:number the-turn}
+        c (conj (vec (:content n)) (xml/element :turn {:number the-turn}
                                           (xml/element :side {:attacker "German"}
                                                        (xml/element :phase {:name "Rally"}))))]
-    (-> l (zip/replace (assoc n :content c)) zip/down zip/down zip/down)))
+    (-> l (zip/replace (assoc n :content c)) zip/down zip/rightmost zip/down zip/rightmost zip/down zip/rightmost)))
 
 (defn get-game-phase [loc]
   (-> loc zip/node :attrs :name))
@@ -98,7 +112,7 @@
         current-turn (get-game-turn loc)
         next-turn? (and next-attacker? (= next-attacker "German"))
         next-turn (if next-turn?
-                    (inc-turn current-turn)
+                    (inc current-turn)
                     current-turn)
         new-loc (cond next-turn? (append-turn loc next-turn)
                       next-attacker? (append-attacker loc next-attacker)
@@ -140,15 +154,46 @@
   [& args]
   (sc/invoke-later
     (sc/with-widgets [(sc/label :id :turn :text "1")
+                      (sm/mig-panel :id :turn-line :constraints ["" "nogrid" ""] :items [["Turn:"] [turn "grow"]])
                       (sc/button :id :advance-turn-button :text "Next Turn")
+                      (sc/button :id :rewind-turn-button :text "Previous Turn")
+                      (sm/mig-panel :id :turn-panel :constraints [] :items [[turn-line "span 2, align center, wrap"]
+                                                            [advance-turn-button] [rewind-turn-button]])
+
                       (sc/label :id :attacker :text "German")
-                      (sc/button :id :advance-attacker-button :text "Next attacker")
+                      (sm/mig-panel :id :attacker-line :constraints ["" "nogrid" ""] :items [["Attacker:"] [attacker "grow"]])
+                      (sc/button :id :advance-attacker-button :text "Next Attacker")
+                      (sc/button :id :rewind-attacker-button :text "Previous Attacker")
+                      (sm/mig-panel :id :attacker-panel :constraints [] :items [[attacker-line "span 2, align center, wrap"]
+                                                           [advance-attacker-button] [rewind-attacker-button]])
+
                       (sc/label :id :phase :text "Rally")
-                      (sc/button :id :advance-phase-button :text "Next phase")
+                      (sm/mig-panel :id :phase-line :constraints ["" "nogrid" ""] :items [["Phase:"] [phase "grow"]])
+                      (sc/button :id :advance-phase-button :text "Next Phase")
+                      (sc/button :id :rewind-phase-button :text "Previous Phase")
+                      (sm/mig-panel :id :phase-panel :constraints [] :items [[phase-line "span 2, align center, wrap"]
+                                                            [advance-phase-button] [rewind-phase-button]])
+
+                      (sm/mig-panel :id :game-position-panel :constraints [] :items [[turn-panel] [attacker-panel] [phase-panel]])
+
+                      (sc/label :id :rally :text "Reinforcements")
+                      (sm/mig-panel :id :rally-line :constraints ["" "nogrid" ""] :items [["Rally Phase:"] [rally "grow"]])
+                      (sc/button :id :advance-rally-button :text "Next Rally Phase")
+                      (sc/button :id :rewind-rally-button :text "Previous Rally Phrase")
+                      (sm/mig-panel :id :rally-panel :constraints [] :items [[rally-line "span 2, align center, wrap"]
+                                                                            [advance-rally-button] [rewind-rally-button]])
+
                       (sc/text :id :action)
                       (sc/text :id :result)
                       (sc/button :id :add-event-button :text "Add event")
+                      (sm/mig-panel :id :event-panel :constraints ["" "[|fill,grow]" ""] :items [["Action:"] [action "wrap"]
+                                                                             ["Result:"] [result "wrap"]
+                                                                             [add-event-button "span, align center"]])
+
+                      (sm/mig-panel :id :game-event-panel :constraints ["" "[|fill,grow]"] :items [[rally-panel] [event-panel]])
+
                       (sc/button :id :ok :text "OK" :enabled? false)]
+
                      (let [ok-fn (fn [e] (process-the-game e))]
                        (sc/listen advance-turn-button :action (advance-turn turn attacker phase))
                        (sc/listen advance-attacker-button :action (advance-attacker turn attacker phase))
@@ -156,12 +201,9 @@
                        (sc/listen add-event-button :action (add-event action result))
                        (sc/listen ok :action ok-fn)
                        (-> (sc/frame :title "ASL Recorder",
-                                     :content (sm/mig-panel :constraints [] :items [["Turn:"] [turn "w 100!"] ["Attacker:"] [attacker "w 100!"] ["Phase:"] [phase "w 100!, wrap"]
-                                                                                    [advance-turn-button "span 2, align center"] [advance-attacker-button "span 2, align center"] [advance-phase-button "span 2, align center, wrap"]
-                                                                                    ["Action:"] [action "span 5, growx, wrap"]
-                                                                                    ["Result:"] [result "span 5, growx, wrap"]
-                                                                                    [add-event-button "span, align center, wrap"]
-                                                                                    [ok "span, align center"]]),
+                                     :content (sm/mig-panel :constraints [] :items [[game-position-panel "wrap"]
+                                                                                    [game-event-panel "growx, wrap"]
+                                                                                    [ok "align center"]]),
                                      :on-close :exit)
                            sc/pack!
                            sc/show!)))))
