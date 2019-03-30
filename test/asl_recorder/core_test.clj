@@ -1,11 +1,12 @@
 (ns asl-recorder.core-test
   (:require [clojure.test :refer :all]
             [asl-recorder.core :refer :all]
-            [clojure.zip :as zip]))
+            [clojure.zip :as zip]
+            [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd]]))
 
 (deftest test-append-event
   (testing "Try to add an event."
-    (let [new-loc (append-event @game-zip-loc "Reinforcements" "Add action" "Add result")
+    (let [new-loc (append-event @game-zip-loc "Reinforcements" "Add action" nil nil "Add result")
           fe (-> new-loc zip/root zip/xml-zip zip/down zip/down zip/down zip/node :content first :content first)
           fa (-> fe first :content first)
           fr (-> fe second :content first)]
@@ -74,3 +75,14 @@
           {new-loc-2 :new-loc} (advance-game-phase new-loc)]
       (is (= "Movement" (get-game-phase new-loc-2)))
       (is (= 3 (count (-> new-loc-2 zip/up zip/node :content)))))))
+
+(deftest test-extract-selected-die
+  (testing "Make sure I can select the chosen die"
+    (let [w (create-die-radio-buttons white)
+          p1 (sm/mig-panel :id :white-die-panel :constraints ["fill, insets 0"] :items w :user-data white)
+          r (create-die-radio-buttons colored)
+          p2 (sm/mig-panel :id :colored-die-panel :constraints ["fill, insets 0"] :items r :user-data colored)]
+      (sc/selection! (last (sc/select p1 [:JRadioButton])) true)
+      (sc/selection! (second (sc/select p2 [:JRadioButton])) true)
+      (let [die-rolls (gather-die-rolls (list p1 p2))]
+        (is (= 8 (apply + (map :die-roll die-rolls))))))))
