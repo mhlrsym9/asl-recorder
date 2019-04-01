@@ -49,24 +49,26 @@
 (deftest test-advance-game-rally-phase
   (testing "Try out advance-game-rally-phase"
     (let [r (advance-game-rally-phase @game-zip-loc "Reinforcements")]
-      (is (= "ATTACKER Recovery" (:next-rally-phase r))))))
+      (is (= "ATTACKER Recovery" (get-in r [:next-rally-phase-info :next-rally-phase]))))))
 
 (deftest test-advance-game-through-rally-phase
   (testing "Try out advance-game-rally-phase until all sub-phases added."
-    (let [advance-results (take 12 (iterate (fn [{:keys [new-loc next-rally-phase]}] (advance-game-rally-phase new-loc next-rally-phase))
-                                            {:new-loc @game-zip-loc :next-rally-phase "Reinforcements"}))]
-      (is (= "Reinforcements" (:next-rally-phase (nth advance-results 0))))
-      (is (= "ATTACKER Recovery" (:next-rally-phase (nth advance-results 1))))
-      (is (= "DEFENDER Recovery" (:next-rally-phase (nth advance-results 2))))
-      (is (= "ATTACKER Repair" (:next-rally-phase (nth advance-results 3))))
-      (is (= "DEFENDER Repair" (:next-rally-phase (nth advance-results 4))))
-      (is (= "ATTACKER Transfer" (:next-rally-phase (nth advance-results 5))))
-      (is (= "DEFENDER Transfer" (:next-rally-phase (nth advance-results 6))))
-      (is (= "ATTACKER Self-Rally" (:next-rally-phase (nth advance-results 7))))
-      (is (= "DEFENDER Self-Rally" (:next-rally-phase (nth advance-results 8))))
-      (is (= "ATTACKER Unit Rally" (:next-rally-phase (nth advance-results 9))))
-      (is (= "DEFENDER Unit Rally" (:next-rally-phase (nth advance-results 10))))
-      (is (= "Reinforcements" (:next-rally-phase (nth advance-results 11))))
+    (let [advance-results (take 12 (iterate (fn [{:keys [new-loc] {:keys [next-rally-phase]} :next-rally-phase-info}]
+                                              (advance-game-rally-phase new-loc next-rally-phase))
+                                            {:new-loc @game-zip-loc :next-rally-phase-info {:next-rally-phase "Reinforcements"}}))
+          extract-fn (fn [r] (get-in r [:next-rally-phase-info :next-rally-phase]))]
+      (is (= "Reinforcements" (extract-fn (nth advance-results 0))))
+      (is (= "ATTACKER Recovery" (extract-fn (nth advance-results 1))))
+      (is (= "DEFENDER Recovery" (extract-fn (nth advance-results 2))))
+      (is (= "ATTACKER Repair" (extract-fn (nth advance-results 3))))
+      (is (= "DEFENDER Repair" (extract-fn (nth advance-results 4))))
+      (is (= "ATTACKER Transfer" (extract-fn (nth advance-results 5))))
+      (is (= "DEFENDER Transfer" (extract-fn (nth advance-results 6))))
+      (is (= "ATTACKER Self-Rally" (extract-fn (nth advance-results 7))))
+      (is (= "DEFENDER Self-Rally" (extract-fn (nth advance-results 8))))
+      (is (= "ATTACKER Unit Rally" (extract-fn (nth advance-results 9))))
+      (is (= "DEFENDER Unit Rally" (extract-fn (nth advance-results 10))))
+      (is (= "Reinforcements" (extract-fn (nth advance-results 11))))
       (is (= "Prep Fire" (get-game-phase (:new-loc (last advance-results))))))))
 
 (deftest test-advance-game-phase
