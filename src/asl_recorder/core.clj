@@ -18,8 +18,8 @@
          transition-to-rally-phase-repair
          transition-to-rally-phase-transfer
          transition-to-rally-phase-self-rally
-         transition-to-rally-phase-attacker-unit-rally
-         transition-to-rally-phase-defender-unit-rally)
+         transition-to-rally-phase-unit-rally
+         transition-to-rally-phase-unit-rally)
 
 (def rally-phase-map {"Reinforcements"      {:next-rally-phase "ATTACKER Recovery" :transition-fn #'transition-to-rally-phase-recovery}
                       "ATTACKER Recovery"   {:next-rally-phase "DEFENDER Recovery" :transition-fn #'transition-to-rally-phase-recovery}
@@ -29,8 +29,8 @@
                       "ATTACKER Transfer"   {:next-rally-phase "DEFENDER Transfer" :transition-fn #'transition-to-rally-phase-transfer}
                       "DEFENDER Transfer"   {:next-rally-phase "ATTACKER Self-Rally" :transition-fn #'transition-to-rally-phase-self-rally}
                       "ATTACKER Self-Rally" {:next-rally-phase "DEFENDER Self-Rally" :transition-fn #'transition-to-rally-phase-self-rally}
-                      "DEFENDER Self-Rally" {:next-rally-phase "ATTACKER Unit Rally" :transition-fn #'transition-to-rally-phase-attacker-unit-rally}
-                      "ATTACKER Unit Rally" {:next-rally-phase "DEFENDER Unit Rally" :transition-fn #'transition-to-rally-phase-defender-unit-rally}
+                      "DEFENDER Self-Rally" {:next-rally-phase "ATTACKER Unit Rally" :transition-fn #'transition-to-rally-phase-unit-rally}
+                      "ATTACKER Unit Rally" {:next-rally-phase "DEFENDER Unit Rally" :transition-fn #'transition-to-rally-phase-unit-rally}
                       "DEFENDER Unit Rally" {:next-rally-phase "Reinforcements" :transition-fn nil}})
 
 (def phase-map {"Rally" "Prep Fire"
@@ -194,12 +194,13 @@
 (defn create-die-radio-buttons [prefix]
   (let [the-info (create-die-info prefix)
         the-class (keyword (str prefix "-" "die-class"))
-        the-button-group (sc/button-group)]
-    (for [{:keys [id text user-data]} the-info]
-      (vector (sc/radio :id id :class the-class :text text :group the-button-group :user-data user-data)))))
+        the-button-group (sc/button-group)
+        the-radio-buttons (for [{:keys [id text user-data]} the-info]
+                            (vector (sc/radio :id id :class the-class :text text :group the-button-group :user-data user-data)))]
+    {:button-group the-button-group :radio-buttons the-radio-buttons}))
 
 (defn- update-die-radio-buttons-enabled-state [die-panel enabled?]
-  (let [the-info (create-die-info (sc/config die-panel :user-data))
+  (let [the-info (create-die-info (-> die-panel sc/user-data :color))
         the-radio-buttons (map #(get (sc/group-by-id die-panel) %) (map :id the-info))]
     (dorun (map (fn [i] (sc/config! i :enabled? enabled?)) the-radio-buttons))))
 
@@ -213,14 +214,14 @@
   (first (filter identity (map #(when (sc/selection %) %) (sc/select die-panel [:JRadioButton])))))
 
 (defn- gather-die-roll [die-panel]
-  (when-let [selected (find-selected-die-radio-button die-panel)]
-    (hash-map :die-roll (sc/config selected :user-data) :color (sc/config die-panel :user-data))))
+  (when-let [selected (-> die-panel sc/user-data :button-group sc/selection)]
+    (hash-map :die-roll (sc/user-data selected) :color (-> die-panel sc/user-data :color))))
 
 (defn gather-die-rolls [die-panels]
   (filter identity (map gather-die-roll die-panels)))
 
 (defn- clear-die-roll [die-panel]
-  (dorun (map (fn [d] (sc/selection! d :false)) (sc/select die-panel [:JRadioButton]))))
+  (-> die-panel sc/user-data :button-group (sc/selection! false)))
 
 (defn clear-die-rolls [die-panels]
   (dorun (map clear-die-roll die-panels)))
@@ -245,11 +246,27 @@
                       (some #{rally-phase-text} (list "ATTACKER Recovery" "DEFENDER Recovery" "ATTACKER Repair" "DEFENDER Repair"))
                       (and description-text? (or (not white-die-selected?)
                                                  (and white-die-selected? result-text?)))
-                      (some #{rally-phase-text} (list "ATTACKER Self-Rally" "DEFENDER Self-Rally"))
+                      (some #{rally-phase-text} (list "ATTACKER Self-Rally" "DEFENDER Self-Rally" "ATTACKER Unit Rally" "DEFENDER Unit Rally"))
                       (and description-text? white-die-selected? result-text? (or (not= action-option-text "Self Rally")
                                                                                   colored-die-selected?))
                       :else false)]
     (sc/config! add-rally-event-button :enabled? enable?)))
+
+(defn- activate-white-die [e]
+  (let [r (sc/to-root e)
+        rally-phase-text (-> r (sc/select [:#rally-phase]) sc/text)
+        enable? (cond (some #{rally-phase-text} (list "Reinforcements" "ATTACKER Transfer" "DEFENDER Transfer")) false
+                      :else true)]
+    (update-die-radio-buttons-enabled-state (sc/select r [:#white-die-panel]) enable?)))
+
+(defn- activate-colored-die [e]
+  (let [r (sc/to-root e)
+        rally-phase-text (-> r (sc/select [:#rally-phase]) sc/text)
+        action-option-text (-> r (sc/select [:#action-options]) sc/selection)
+        enable? (cond (some #{rally-phase-text} (list "ATTACKER Self-Rally" "DEFENDER Self-Rally" "ATTACKER Unit Rally" "DEFENDER Unit Rally"))
+                      (not= "Wound Resolution" action-option-text)
+                      :else false)]
+    (update-die-radio-buttons-enabled-state (sc/select r [:#colored-die-panel]) enable?)))
 
 (defn- enable-on-description-text-and-white-die-selected [e]
   (let [r (sc/to-root e)
@@ -281,6 +298,8 @@
 
 (defn- perform-activations [e]
   (activate-add-rally-event-button e)
+  (activate-white-die e)
+  (activate-colored-die e)
   (activate-final-modifier e)
   (activate-result e))
 
@@ -292,8 +311,6 @@
     (sc/config! description :enabled? true)
     (sc/text! description "")
     (clear-die-rolls [white-die-panel colored-die-panel])
-    (disable-die-radio-buttons white-die-panel)
-    (disable-die-radio-buttons colored-die-panel)
     (sc/selection! final-modifier 0)
     (sc/text! result "")
     (perform-activations e)
@@ -306,10 +323,7 @@
     (sc/selection! action-options 0)
     (sc/config! description :enabled? true)
     (sc/text! description "")
-    (enable-die-radio-buttons white-die-panel)
-    (clear-die-roll white-die-panel)
-    (disable-die-radio-buttons colored-die-panel)
-    (clear-die-roll colored-die-panel)
+    (clear-die-rolls [white-die-panel colored-die-panel])
     (sc/selection! final-modifier 0)
     (sc/text! result "")
     (perform-activations e)
@@ -322,10 +336,7 @@
     (sc/selection! action-options 0)
     (sc/config! description :enabled? true)
     (sc/text! description "")
-    (enable-die-radio-buttons white-die-panel)
-    (clear-die-roll white-die-panel)
-    (disable-die-radio-buttons colored-die-panel)
-    (clear-die-roll colored-die-panel)
+    (clear-die-rolls [white-die-panel colored-die-panel])
     (sc/selection! final-modifier 0)
     (sc/text! result "")
     (perform-activations e)
@@ -339,8 +350,6 @@
     (sc/config! description :enabled? true)
     (sc/text! description "")
     (clear-die-rolls [white-die-panel colored-die-panel])
-    (disable-die-radio-buttons white-die-panel)
-    (disable-die-radio-buttons colored-die-panel)
     (sc/selection! final-modifier 0)
     (sc/text! result "")
     (perform-activations e)
@@ -354,8 +363,21 @@
     (sc/config! description :enabled? true)
     (sc/text! description "")
     (clear-die-rolls [white-die-panel colored-die-panel])
-    (enable-die-radio-buttons white-die-panel)
-    (enable-die-radio-buttons colored-die-panel)
+    (sc/config! final-modifier :enabled? true)
+    (sc/selection! final-modifier 0)
+    (sc/config! result :enabled? true)
+    (sc/text! result "")
+    (perform-activations e)
+    e))
+
+(defn- reset-rally-phase-unit-rally [e]
+  (let [r (sc/to-root e)
+        event-panel (sc/select r [:#event-panel])
+        {:keys [action-options description white-die-panel colored-die-panel final-modifier result]} (sc/group-by-id event-panel)]
+    (sc/selection! action-options 0)
+    (sc/config! description :enabled? true)
+    (sc/text! description "")
+    (clear-die-rolls [white-die-panel colored-die-panel])
     (sc/config! final-modifier :enabled? true)
     (sc/selection! final-modifier 0)
     (sc/config! result :enabled? true)
@@ -403,6 +425,11 @@
   (establish-action-options e ["Self Rally" "Wound Resolution"] true)
   (reset-rally-phase-self-rally e))
 
+(defn- transition-to-rally-phase-unit-rally [e next-rally-phase]
+  (update-rally-panel e next-rally-phase true true)
+  (establish-action-options e ["Unit Rally" "Wound Resolution"] true)
+  (reset-rally-phase-unit-rally e))
+
 (defn- add-rally-event [e]
   (let [r (sc/to-root e)
         rally-phase-text (-> r (sc/select [:#rally-phase]) sc/text)
@@ -421,77 +448,87 @@
           (some #{rally-phase-text} (list "ATTACKER Recovery" "DEFENDER Recovery")) (reset-rally-phase-recovery e)
           (some #{rally-phase-text} (list "ATTACKER Repair" "DEFENDER Repair")) (reset-rally-phase-repair e)
           (some #{rally-phase-text} (list "ATTACKER Transfer" "DEFENDER Transfer")) (reset-rally-phase-transfer e)
-          (some #{rally-phase-text} (list "ATTACKER Self-Rally" "DEFENDER Self-Rally")) (reset-rally-phase-self-rally e))))
+          (some #{rally-phase-text} (list "ATTACKER Self-Rally" "DEFENDER Self-Rally")) (reset-rally-phase-self-rally e)
+          (some #{rally-phase-text} (list "ATTACKER Unit Rally" "DEFENDER Unit Rally")) (reset-rally-phase-unit-rally e))))
 
 (defn -main
   [& args]
   (sc/invoke-later
-    (sc/with-widgets [(sc/label :id :turn :text "1")
-                      (sm/mig-panel :id :turn-line :constraints ["" "nogrid" ""] :items [["Turn:"] [turn "grow"]])
-                      (sc/button :id :advance-turn-button :text "Next Turn")
-                      (sc/button :id :rewind-turn-button :text "Previous Turn")
-                      (sm/mig-panel :id :turn-panel :constraints [] :items [[turn-line "span 2, align center, wrap"]
-                                                                            [advance-turn-button] [rewind-turn-button]])
+    (let [white-die-info (create-die-radio-buttons white)
+          colored-die-info (create-die-radio-buttons colored)]
+      (sc/with-widgets [(sc/label :id :turn :text "1")
+                        (sm/mig-panel :id :turn-line :constraints ["" "nogrid" ""] :items [["Turn:"] [turn "grow"]])
+                        (sc/button :id :advance-turn-button :text "Next Turn")
+                        (sc/button :id :rewind-turn-button :text "Previous Turn")
+                        (sm/mig-panel :id :turn-panel :constraints [] :items [[turn-line "span 2, align center, wrap"]
+                                                                              [advance-turn-button] [rewind-turn-button]])
 
-                      (sc/label :id :attacker :text "German")
-                      (sm/mig-panel :id :attacker-line :constraints ["" "nogrid" ""] :items [["Attacker:"] [attacker "grow"]])
-                      (sc/button :id :advance-attacker-button :text "Next Attacker")
-                      (sc/button :id :rewind-attacker-button :text "Previous Attacker")
-                      (sm/mig-panel :id :attacker-panel :constraints [] :items [[attacker-line "span 2, align center, wrap"]
-                                                                                [advance-attacker-button] [rewind-attacker-button]])
+                        (sc/label :id :attacker :text "German")
+                        (sm/mig-panel :id :attacker-line :constraints ["" "nogrid" ""] :items [["Attacker:"] [attacker "grow"]])
+                        (sc/button :id :advance-attacker-button :text "Next Attacker")
+                        (sc/button :id :rewind-attacker-button :text "Previous Attacker")
+                        (sm/mig-panel :id :attacker-panel :constraints [] :items [[attacker-line "span 2, align center, wrap"]
+                                                                                  [advance-attacker-button] [rewind-attacker-button]])
 
-                      (sc/label :id :phase :text "Rally")
-                      (sm/mig-panel :id :phase-line :constraints ["" "nogrid" ""] :items [["Phase:"] [phase "grow"]])
-                      (sc/button :id :advance-phase-button :text "Next Phase")
-                      (sc/button :id :rewind-phase-button :text "Previous Phase")
-                      (sm/mig-panel :id :phase-panel :constraints [] :items [[phase-line "span 2, align center, wrap"]
-                                                                             [advance-phase-button] [rewind-phase-button]])
+                        (sc/label :id :phase :text "Rally")
+                        (sm/mig-panel :id :phase-line :constraints ["" "nogrid" ""] :items [["Phase:"] [phase "grow"]])
+                        (sc/button :id :advance-phase-button :text "Next Phase")
+                        (sc/button :id :rewind-phase-button :text "Previous Phase")
+                        (sm/mig-panel :id :phase-panel :constraints [] :items [[phase-line "span 2, align center, wrap"]
+                                                                               [advance-phase-button] [rewind-phase-button]])
 
-                      (sm/mig-panel :id :game-position-panel :constraints [] :items [[turn-panel] [attacker-panel] [phase-panel]])
+                        (sm/mig-panel :id :game-position-panel :constraints [] :items [[turn-panel] [attacker-panel] [phase-panel]])
 
-                      (sc/label :id :rally-phase)
-                      (sm/mig-panel :id :rally-phase-line :constraints ["" "nogrid" ""] :items [["Rally Phase:"] [rally-phase "grow"]])
-                      (sc/button :id :advance-rally-phase-button :text "Next Rally Phase")
-                      (sc/button :id :rewind-rally-phase-button :text "Previous Rally Phrase")
-                      (sm/mig-panel :id :rally-panel :constraints [] :items [[rally-phase-line "span 2, align center, wrap"]
-                                                                             [advance-rally-phase-button] [rewind-rally-phase-button]])
+                        (sc/label :id :rally-phase)
+                        (sm/mig-panel :id :rally-phase-line :constraints ["" "nogrid" ""] :items [["Rally Phase:"] [rally-phase "grow"]])
+                        (sc/button :id :advance-rally-phase-button :text "Next Rally Phase")
+                        (sc/button :id :rewind-rally-phase-button :text "Previous Rally Phrase")
+                        (sm/mig-panel :id :rally-panel :constraints [] :items [[rally-phase-line "span 2, align center, wrap"]
+                                                                               [advance-rally-phase-button] [rewind-rally-phase-button]])
 
-                      (sc/combobox :id :action-options)
-                      (sc/text :id :description :text "")
-                      (sm/mig-panel :id :white-die-panel :constraints ["fill, insets 0"] :items (create-die-radio-buttons white) :user-data white)
-                      (sm/mig-panel :id :colored-die-panel :constraints ["fill, insets 0"] :items (create-die-radio-buttons colored) :user-data colored)
-                      (sc/spinner :id :final-modifier :model (sc/spinner-model 0 :from -10 :to 10 :by 1))
-                      (sc/text :id :result)
-                      (sc/button :id :add-rally-event-button :text "Add event")
-                      (sm/mig-panel :id :event-panel :constraints ["" "[|fill, grow]" ""] :items [["Action:" "align right"] [action-options "wrap"]
-                                                                                                  ["Description:" "align right"] [description "wrap"]
-                                                                                                  ["White Die:" "align right"] [white-die-panel "span, wrap"]
-                                                                                                  ["Colored Die:" "align right"] [colored-die-panel "span, wrap"]
-                                                                                                  ["Final Modifier:" "align right"] [final-modifier "wrap"]
-                                                                                                  ["Result:" "align right"] [result "wrap"]
-                                                                                                  [add-rally-event-button "span, align center"]])
+                        (sc/combobox :id :action-options)
+                        (sc/text :id :description :text "")
+                        (sm/mig-panel :id :white-die-panel
+                                      :constraints ["fill, insets 0"]
+                                      :items (:radio-buttons white-die-info)
+                                      :user-data {:color white :button-group (:button-group white-die-info)})
+                        (sm/mig-panel :id :colored-die-panel
+                                      :constraints ["fill, insets 0"]
+                                      :items (:radio-buttons colored-die-info)
+                                      :user-data {:color colored :button-group (:button-group colored-die-info)})
+                        (sc/spinner :id :final-modifier :model (sc/spinner-model 0 :from -10 :to 10 :by 1))
+                        (sc/text :id :result)
+                        (sc/button :id :add-rally-event-button :text "Add event")
+                        (sm/mig-panel :id :event-panel :constraints ["" "[|fill, grow]" ""] :items [["Action:" "align right"] [action-options "wrap"]
+                                                                                                    ["Description:" "align right"] [description "wrap"]
+                                                                                                    ["White Die:" "align right"] [white-die-panel "span, wrap"]
+                                                                                                    ["Colored Die:" "align right"] [colored-die-panel "span, wrap"]
+                                                                                                    ["Final Modifier:" "align right"] [final-modifier "wrap"]
+                                                                                                    ["Result:" "align right"] [result "wrap"]
+                                                                                                    [add-rally-event-button "span, align center"]])
 
-                      (sm/mig-panel :id :game-event-panel :constraints ["" "[|fill, grow]" ""] :items [[rally-panel] [event-panel]])
+                        (sm/mig-panel :id :game-event-panel :constraints ["" "[|fill, grow]" ""] :items [[rally-panel] [event-panel]])
 
-                      (sc/button :id :ok :text "OK" :enabled? false)]
-                     (let [ok-fn (fn [e] (process-the-game e))]
-                       (sc/listen advance-turn-button :action (advance-turn turn attacker phase))
-                       (sc/listen advance-attacker-button :action (advance-attacker turn attacker phase))
-                       (sc/listen advance-phase-button :action (advance-phase turn attacker phase))
-                       (sc/listen advance-rally-phase-button :action advance-rally-phase)
-                       (sc/listen description :document (fn [_] (perform-activations description)))
-                       (add-change-listener-to-die-radio-buttons white-die-panel perform-activations)
-                       (add-change-listener-to-die-radio-buttons colored-die-panel perform-activations)
-                       (sc/listen final-modifier :change activate-add-rally-event-button)
-                       (sc/listen result :document (fn [_] (activate-add-rally-event-button result)))
-                       (sc/listen add-rally-event-button :action add-rally-event)
-                       (sc/listen ok :action ok-fn)
+                        (sc/button :id :ok :text "OK" :enabled? false)]
+                       (let [ok-fn (fn [e] (process-the-game e))]
+                         (sc/listen advance-turn-button :action (advance-turn turn attacker phase))
+                         (sc/listen advance-attacker-button :action (advance-attacker turn attacker phase))
+                         (sc/listen advance-phase-button :action (advance-phase turn attacker phase))
+                         (sc/listen advance-rally-phase-button :action advance-rally-phase)
+                         (sc/listen action-options :selection perform-activations)
+                         (sc/listen description :document (fn [_] (perform-activations description)))
+                         (add-change-listener-to-die-radio-buttons white-die-panel perform-activations)
+                         (add-change-listener-to-die-radio-buttons colored-die-panel perform-activations)
+                         ;                         (sc/listen final-modifier :change activate-add-rally-event-button)
+                         (sc/listen result :document (fn [_] (activate-add-rally-event-button result)))
+                         (sc/listen add-rally-event-button :action add-rally-event)
+                         (sc/listen ok :action ok-fn)
 
-                       (-> (sc/frame :title "ASL Recorder",
-                                     :content (sm/mig-panel :constraints [] :items [[game-position-panel "wrap"]
-                                                                                    [game-event-panel "growx, wrap"]
-                                                                                    [ok "align center"]]),
-                                     :on-close :exit)
-                           (transition-to-rally-phase-reinforcements "Reinforcements")
-                           sc/pack!
-                           sc/show!)))))
+                         (-> (sc/frame :title "ASL Recorder",
+                                       :content (sm/mig-panel :constraints [] :items [[game-position-panel "wrap"]
+                                                                                      [game-event-panel "growx, wrap"]
+                                                                                      [ok "align center"]]),
+                                       :on-close :exit)
+                             (transition-to-rally-phase-reinforcements "Reinforcements")
+                             sc/pack!
+                             sc/show!))))))
