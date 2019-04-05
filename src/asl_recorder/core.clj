@@ -14,13 +14,19 @@
            [javax.swing JFrame SwingWorker SwingWorker$StateValue JOptionPane ButtonGroup])
   (:gen-class))
 
-(declare transition-to-rally-phase-recovery
+(declare transition-to-rally-phase-reinforcements
+         transition-to-rally-phase-recovery
          transition-to-rally-phase-repair
          transition-to-rally-phase-transfer
          transition-to-rally-phase-self-rally
          transition-to-rally-phase-unit-rally
-         transition-to-rally-phase-unit-rally
-         transition-to-prep-fire)
+         transition-to-prep-fire
+         transition-to-movement
+         transition-to-defensive-fire
+         transition-to-advancing-fire
+         transition-to-rout
+         transition-to-advance
+         transition-to-close-combat)
 
 (def rally-phase-map {"Reinforcements"      {:next-rally-phase "ATTACKER Recovery" :transition-fn #'transition-to-rally-phase-recovery}
                       "ATTACKER Recovery"   {:next-rally-phase "DEFENDER Recovery" :transition-fn #'transition-to-rally-phase-recovery}
@@ -34,14 +40,14 @@
                       "ATTACKER Unit Rally" {:next-rally-phase "DEFENDER Unit Rally" :transition-fn #'transition-to-rally-phase-unit-rally}
                       "DEFENDER Unit Rally" {:next-rally-phase nil :transition-fn #'transition-to-prep-fire}})
 
-(def phase-map {"Rally" "Prep Fire"
-                "Prep Fire" "Movement"
-                "Movement" "Defensive Fire"
-                "Defensive Fire" "Advancing Fire"
-                "Advancing Fire" "Rout"
-                "Rout" "Advance"
-                "Advance" "Close Combat"
-                "Close Combat" "Rally"})
+(def phase-map {"Rally"          {:next-phase "Prep Fire" :transition-fn #'transition-to-prep-fire}
+                "Prep Fire"      {:next-phase "Movement" :transition-fn #'transition-to-movement}
+                "Movement"       {:next-phase "Defensive Fire" :transition-fn #'transition-to-defensive-fire}
+                "Defensive Fire" {:next-phase "Advancing Fire" :transition-fn #'transition-to-advancing-fire}
+                "Advancing Fire" {:next-phase "Rout" :transition-fn #'transition-to-rout}
+                "Rout"           {:next-phase "Advance" :transition-fn #'transition-to-advance}
+                "Advance"        {:next-phase "Close Combat" :transition-fn #'transition-to-close-combat}
+                "Close Combat"   {:next-phase "Rally" :transition-fn #'transition-to-rally-phase-reinforcements}})
 
 (def attacker-map {"German" "Russian"
                    "Russian" "German"})
@@ -129,7 +135,7 @@
 
 (defn advance-game-phase [loc]
   (let [current-phase (get-game-phase loc)
-        next-phase (get phase-map current-phase)
+        {:keys [next-phase] :as next-phase-info} (get phase-map current-phase)
         current-attacker (get-game-attacker loc)
         next-attacker? (= next-phase "Rally")
         next-attacker (if next-attacker?
@@ -143,20 +149,24 @@
         new-loc (cond next-turn? (append-turn loc next-turn)
                       next-attacker? (append-attacker loc next-attacker)
                       :else (append-phase loc next-phase))]
-    {:next-turn next-turn :next-attacker next-attacker :next-phase next-phase :new-loc new-loc}))
+    {:next-turn next-turn :next-attacker next-attacker :next-phase-info next-phase-info :new-loc new-loc}))
 
 (defn advance-game-attacker [loc]
-  (let [current-attacker (get-game-attacker loc)]
-    (loop [{:keys [next-attacker next-phase new-loc] :as r}
-           {:next-turn (get-game-turn loc) :next-attacker current-attacker :next-phase (get-game-phase loc) :new-loc loc}]
+  (let [current-attacker (get-game-attacker loc)
+        current-phase (get-game-phase loc)
+        transition-fn (->> current-phase (get phase-map) :transition-fn)]
+    (loop [{next-attacker :next-attacker, new-loc :new-loc, {next-phase :next-phase} :next-phase-info, :as r}
+           {:next-turn (get-game-turn loc) :next-attacker current-attacker :next-phase-info {:next-phase current-phase :transition-fn transition-fn} :new-loc loc}]
       (if (and (= "Rally" next-phase) (not= current-attacker next-attacker))
         r
         (recur (advance-game-phase new-loc))))))
 
 (defn advance-game-turn [loc]
-  (let [current-turn (get-game-turn loc)]
+  (let [current-turn (get-game-turn loc)
+        current-phase (get-game-phase loc)
+        transition-fn (->> current-phase (get phase-map) :transition-fn)]
     (loop [{:keys [next-turn next-attacker new-loc] :as r}
-           {:next-turn current-turn :next-attacker (get-game-attacker loc) :next-phase (get-game-phase loc) :new-loc loc}]
+           {:next-turn current-turn :next-attacker (get-game-attacker loc) :next-phase-info {:next-phase current-phase :transition-fn transition-fn} :new-loc loc}]
       (if (and (= "German" next-attacker) (not= current-turn next-turn))
         r
         (recur (advance-game-phase new-loc))))))
@@ -172,10 +182,16 @@
     (update-time turn (sc/text turn) attacker (sc/text attacker) phase next-phase)
     (transition-fn e next-rally-phase)))
 
-(defn- advance-phase [turn attacker phase]
-  (fn [_] (let [{:keys [next-turn next-attacker next-phase new-loc]} (advance-game-phase @game-zip-loc)]
+(defn- advance-phase [e]
+  (fn [_] (let [r (sc/to-root e)
+                turn (sc/select r [:#turn])
+                attacker (sc/select r [:#attacker])
+                phase (sc/select r [:#phase])
+                {:keys [next-turn next-attacker new-loc], {:keys [next-phase transition-fn]} :next-phase-info} (advance-game-phase @game-zip-loc)]
             (reset! game-zip-loc new-loc)
-            (update-time turn next-turn attacker next-attacker phase next-phase))))
+            (update-time turn next-turn attacker next-attacker phase next-phase)
+            (transition-fn e)
+            e)))
 
 (defn- advance-attacker [turn attacker phase]
   (fn [_] (let [{:keys [next-turn next-attacker next-phase new-loc]} (advance-game-attacker @game-zip-loc)]
@@ -245,7 +261,7 @@
         rally-phase-text (-> r (sc/select [:#sub-phase]) sc/text)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)
         enable? (cond (some #{rally-phase-text} (list "ATTACKER Self-Rally" "DEFENDER Self-Rally" "ATTACKER Unit Rally" "DEFENDER Unit Rally"))
-                      (not= "Wound Resolution" action-option-text)
+                      (some #{"Self Rally" "Unit Rally"} (list action-option-text))
                       :else false)]
     (update-die-radio-buttons-enabled-state (sc/select r [:#colored-die-panel]) enable?)))
 
@@ -310,6 +326,7 @@
     (sc/config! add-event-button :enabled? enable?)))
 
 (defn- perform-rally-phase-activations [e]
+  (sc/config! (-> e sc/to-root (sc/select [:#description])) :enabled? true)
   (activate-white-die e)
   (activate-colored-die e)
   (activate-final-modifier e)
@@ -319,6 +336,7 @@
 (defn- perform-prep-fire-phase-activations [e]
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
+    (sc/config! (sc/select r [:#description]) :enabled? true)
     (enable-die-radio-buttons (sc/select r [:#white-die-panel]))
     (update-die-radio-buttons-enabled-state (sc/select r [:#colored-die-panel]) (not= "Wound Resolution" action-option-text))
     (sc/config! (sc/select r [:#final-modifier]) :enabled? true)
@@ -331,101 +349,16 @@
     (cond (= "Rally" phase-text) (perform-rally-phase-activations e)
           (= "Prep Fire" phase-text) (perform-prep-fire-phase-activations e))))
 
-(defn- reset-rally-phase-reinforcements [e]
+(defn- reset-event-panel [e]
   (let [r (sc/to-root e)
         event-panel (sc/select r [:#event-panel])
         {:keys [action-options description white-die-panel colored-die-panel final-modifier result]} (sc/group-by-id event-panel)]
     (sc/selection! action-options 0)
-    (sc/config! description :enabled? true)
     (sc/text! description "")
     (clear-die-rolls [white-die-panel colored-die-panel])
     (sc/selection! final-modifier 0)
     (sc/text! result "")
     (perform-rally-phase-activations e)
-    e))
-
-(defn- reset-rally-phase-recovery [e]
-  (let [r (sc/to-root e)
-        event-panel (sc/select r [:#event-panel])
-        {:keys [action-options description white-die-panel colored-die-panel final-modifier result]}  (sc/group-by-id event-panel)]
-    (sc/selection! action-options 0)
-    (sc/config! description :enabled? true)
-    (sc/text! description "")
-    (clear-die-rolls [white-die-panel colored-die-panel])
-    (sc/selection! final-modifier 0)
-    (sc/text! result "")
-    (perform-rally-phase-activations e)
-    e))
-
-(defn- reset-rally-phase-repair [e]
-  (let [r (sc/to-root e)
-        event-panel (sc/select r [:#event-panel])
-        {:keys [action-options description white-die-panel colored-die-panel final-modifier result]}  (sc/group-by-id event-panel)]
-    (sc/selection! action-options 0)
-    (sc/config! description :enabled? true)
-    (sc/text! description "")
-    (clear-die-rolls [white-die-panel colored-die-panel])
-    (sc/selection! final-modifier 0)
-    (sc/text! result "")
-    (perform-rally-phase-activations e)
-    e))
-
-(defn- reset-rally-phase-transfer [e]
-  (let [r (sc/to-root e)
-        event-panel (sc/select r [:#event-panel])
-        {:keys [action-options description white-die-panel colored-die-panel final-modifier result]} (sc/group-by-id event-panel)]
-    (sc/selection! action-options 0)
-    (sc/config! description :enabled? true)
-    (sc/text! description "")
-    (clear-die-rolls [white-die-panel colored-die-panel])
-    (sc/selection! final-modifier 0)
-    (sc/text! result "")
-    (perform-rally-phase-activations e)
-    e))
-
-(defn- reset-rally-phase-self-rally [e]
-  (let [r (sc/to-root e)
-        event-panel (sc/select r [:#event-panel])
-        {:keys [action-options description white-die-panel colored-die-panel final-modifier result]} (sc/group-by-id event-panel)]
-    (sc/selection! action-options 0)
-    (sc/config! description :enabled? true)
-    (sc/text! description "")
-    (clear-die-rolls [white-die-panel colored-die-panel])
-    (sc/config! final-modifier :enabled? true)
-    (sc/selection! final-modifier 0)
-    (sc/config! result :enabled? true)
-    (sc/text! result "")
-    (perform-rally-phase-activations e)
-    e))
-
-(defn- reset-rally-phase-unit-rally [e]
-  (let [r (sc/to-root e)
-        event-panel (sc/select r [:#event-panel])
-        {:keys [action-options description white-die-panel colored-die-panel final-modifier result]} (sc/group-by-id event-panel)]
-    (sc/selection! action-options 0)
-    (sc/config! description :enabled? true)
-    (sc/text! description "")
-    (clear-die-rolls [white-die-panel colored-die-panel])
-    (sc/config! final-modifier :enabled? true)
-    (sc/selection! final-modifier 0)
-    (sc/config! result :enabled? true)
-    (sc/text! result "")
-    (perform-rally-phase-activations e)
-    e))
-
-(defn- reset-prep-fire [e]
-  (let [r (sc/to-root e)
-        event-panel (sc/select r [:#event-panel])
-        {:keys [action-options description white-die-panel colored-die-panel final-modifier result]} (sc/group-by-id event-panel)]
-    (sc/selection! action-options 0)
-    (sc/config! description :enabled? true)
-    (sc/text! description "")
-    (clear-die-rolls [white-die-panel colored-die-panel])
-    (sc/config! final-modifier :enabled? true)
-    (sc/selection! final-modifier 0)
-    (sc/config! result :enabled? true)
-    (sc/text! result "")
-    (perform-prep-fire-phase-activations e)
     e))
 
 (defn- reset-sub-panel-for-rally-phase [e]
@@ -436,7 +369,8 @@
     (sc/text! sub-phase "")
     (sc/text! advance-sub-phase-button "Next Rally Sub-Phase")
     (sc/text! rewind-sub-phase-button "Previous Rally Sub-Phase")
-    (sc/config! sub-panel :visible? true)))
+    (sc/config! sub-panel :visible? true)
+    e))
 
 (defn- reset-sub-panel-for-prep-fire-phase [e]
   (let [r (sc/to-root e)
@@ -446,7 +380,8 @@
     (sc/text! sub-phase "")
     (sc/text! advance-sub-phase-button "Next Prep Fire Sub-Phase")
     (sc/text! rewind-sub-phase-button "Previous Prep Fire Sub-Phase")
-    (sc/config! sub-panel :visible? false)))
+    (sc/config! sub-panel :visible? false)
+    e))
 
 (defn- update-sub-panel [e next-sub-phase advance-sub-phase-button-enabled? rewind-sub-phase-button-enabled?]
   (let [r (sc/to-root e)
@@ -454,55 +389,63 @@
         {:keys [sub-phase advance-sub-phase-button rewind-sub-phase-button]} (sc/group-by-id sub-panel)]
     (sc/text! sub-phase next-sub-phase)
     (sc/config! advance-sub-phase-button :enabled? advance-sub-phase-button-enabled?)
-    (sc/config! rewind-sub-phase-button :enabled? rewind-sub-phase-button-enabled?)))
+    (sc/config! rewind-sub-phase-button :enabled? rewind-sub-phase-button-enabled?)
+    e))
 
 (defn- establish-action-options [e options enabled?]
   (let [r (sc/to-root e)
         event-panel (sc/select r [:#event-panel])
         {:keys [action-options]} (sc/group-by-id event-panel)]
     (sc/config! action-options :model options)
-    (sc/config! action-options :enabled? enabled?)))
+    (sc/config! action-options :enabled? enabled?)
+    e))
 
 (defn- transition-to-rally-phase-reinforcements [e next-rally-phase]
-  (reset-sub-panel-for-rally-phase e)
-  (update-sub-panel e next-rally-phase true false)
-  (establish-action-options e ["Place Reinforcements"] false)
-  (reset-rally-phase-reinforcements e))
+  (-> e
+      reset-sub-panel-for-rally-phase
+      (update-sub-panel next-rally-phase true false)
+      (establish-action-options ["Place Reinforcements"] false)
+      reset-event-panel))
 
 (defn- transition-to-rally-phase-recovery [e next-rally-phase]
-  (update-sub-panel e next-rally-phase true true)
-  (establish-action-options e ["Recover SW"] false)
-  (reset-rally-phase-recovery e))
+  (-> e
+      (update-sub-panel next-rally-phase true true)
+      (establish-action-options ["Recover SW"] false)
+      reset-event-panel))
 
 (defn- transition-to-rally-phase-repair [e next-rally-phase]
-  (update-sub-panel e next-rally-phase true true)
-  (establish-action-options e ["Repair SW"] false)
-  (reset-rally-phase-repair e))
+  (-> e
+      (update-sub-panel next-rally-phase true true)
+      (establish-action-options ["Repair SW"] false)
+      reset-event-panel))
 
 (defn- transition-to-rally-phase-transfer [e next-rally-phase]
-  (update-sub-panel e next-rally-phase true true)
-  (establish-action-options e ["Transfer SW"] false)
-  (reset-rally-phase-transfer e))
+  (-> e
+      (update-sub-panel next-rally-phase true true)
+      (establish-action-options ["Transfer SW"] false)
+      reset-event-panel))
 
 (defn- transition-to-rally-phase-self-rally [e next-rally-phase]
-  (update-sub-panel e next-rally-phase true true)
-  (establish-action-options e ["Self Rally" "Wound Resolution"] true)
-  (reset-rally-phase-self-rally e))
+  (-> e
+      (update-sub-panel next-rally-phase true true)
+      (establish-action-options ["Self Rally" "Wound Resolution" "Leader Creation"] true)
+      reset-event-panel))
 
 (defn- transition-to-rally-phase-unit-rally [e next-rally-phase]
-  (update-sub-panel e next-rally-phase true true)
-  (establish-action-options e ["Unit Rally" "Wound Resolution"] true)
-  (reset-rally-phase-unit-rally e))
+  (-> e
+      (update-sub-panel next-rally-phase true true)
+      (establish-action-options ["Unit Rally" "Wound Resolution"] true)
+      reset-event-panel))
 
 (defn- transition-to-prep-fire [e _]
-  (reset-sub-panel-for-prep-fire-phase e)
-  (update-sub-panel e "" false false)
-  (establish-action-options e ["Prep Fire" "Morale Check" "Pin Task Check" "Wound Resolution"] true)
-  (reset-prep-fire e))
+  (-> e
+      reset-sub-panel-for-prep-fire-phase
+      (update-sub-panel "" false false)
+      (establish-action-options ["Prep Fire" "Morale Check" "Pin Task Check" "Wound Resolution"] true)
+      reset-event-panel))
 
 (defn- add-event [e]
   (let [r (sc/to-root e)
-        phase-text (-> r (sc/select [:#phase]) sc/text)
         sub-phase-text (-> r (sc/select [:#sub-phase]) sc/text)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)
         description (sc/select r [:#description])
@@ -515,14 +458,7 @@
         result (sc/select r [:#result])
         result-text (sc/text result)]
     (swap! game-zip-loc append-event sub-phase-text action-option-text description-text die-rolls final-modifier-selection result-text)
-    (cond (= "Rally" phase-text)
-          (cond (= "Reinforcements" sub-phase-text) (reset-rally-phase-reinforcements e)
-                (some #{sub-phase-text} (list "ATTACKER Recovery" "DEFENDER Recovery")) (reset-rally-phase-recovery e)
-                (some #{sub-phase-text} (list "ATTACKER Repair" "DEFENDER Repair")) (reset-rally-phase-repair e)
-                (some #{sub-phase-text} (list "ATTACKER Transfer" "DEFENDER Transfer")) (reset-rally-phase-transfer e)
-                (some #{sub-phase-text} (list "ATTACKER Self-Rally" "DEFENDER Self-Rally")) (reset-rally-phase-self-rally e)
-                (some #{sub-phase-text} (list "ATTACKER Unit Rally" "DEFENDER Unit Rally")) (reset-rally-phase-unit-rally e))
-          (= "Prep Fire" phase-text) (reset-prep-fire e))))
+    (reset-event-panel e)))
 
 (defn -main
   [& args]
@@ -587,7 +523,7 @@
                        (let [ok-fn (fn [e] (process-the-game e))]
                          (sc/listen advance-turn-button :action (advance-turn turn attacker phase))
                          (sc/listen advance-attacker-button :action (advance-attacker turn attacker phase))
-                         (sc/listen advance-phase-button :action (advance-phase turn attacker phase))
+                         (sc/listen advance-phase-button :action advance-phase)
                          (sc/listen advance-sub-phase-button :action advance-sub-phase)
                          (sc/listen action-options :selection perform-activations)
                          (sc/listen description :document (fn [_] (perform-activations description)))

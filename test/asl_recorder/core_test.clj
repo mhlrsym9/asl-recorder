@@ -68,8 +68,8 @@
       (is (= "DEFENDER Self-Rally" (extract-fn (nth advance-results 8))))
       (is (= "ATTACKER Unit Rally" (extract-fn (nth advance-results 9))))
       (is (= "DEFENDER Unit Rally" (extract-fn (nth advance-results 10))))
-      (is (= "Reinforcements" (extract-fn (nth advance-results 11))))
-      (is (= "Prep Fire" (get-game-phase (:new-loc (last advance-results))))))))
+      (is (= nil (extract-fn (nth advance-results 11))))
+      (is (= "Prep Fire" (:next-phase (get-game-phase (:new-loc (last advance-results)))))))))
 
 (deftest test-advance-game-phase
   (testing "Try out advance-game-phase"
@@ -80,10 +80,10 @@
 
 (deftest test-extract-selected-die
   (testing "Make sure I can select the chosen die"
-    (let [{w :radio-buttons} (create-die-radio-buttons white)
-          p1 (sm/mig-panel :id :white-die-panel :constraints ["fill, insets 0"] :items w :user-data white)
-          {r :radio-buttons} (create-die-radio-buttons colored)
-          p2 (sm/mig-panel :id :colored-die-panel :constraints ["fill, insets 0"] :items r :user-data colored)]
+    (let [{w :radio-buttons bg-white :button-group} (create-die-radio-buttons white)
+          p1 (sm/mig-panel :id :white-die-panel :constraints ["fill, insets 0"] :items w :user-data {:color white :button-group bg-white})
+          {r :radio-buttons bg-colored :button-group} (create-die-radio-buttons colored)
+          p2 (sm/mig-panel :id :colored-die-panel :constraints ["fill, insets 0"] :items r :user-data {:color colored :button-group bg-colored})]
       (sc/selection! (last (sc/select p1 [:JRadioButton])) true)
       (sc/selection! (second (sc/select p2 [:JRadioButton])) true)
       (let [die-rolls (gather-die-rolls (list p1 p2))]
