@@ -183,15 +183,15 @@
     (transition-fn e next-rally-phase)))
 
 (defn- advance-phase [e]
-  (fn [_] (let [r (sc/to-root e)
-                turn (sc/select r [:#turn])
-                attacker (sc/select r [:#attacker])
-                phase (sc/select r [:#phase])
-                {:keys [next-turn next-attacker new-loc], {:keys [next-phase transition-fn]} :next-phase-info} (advance-game-phase @game-zip-loc)]
-            (reset! game-zip-loc new-loc)
-            (update-time turn next-turn attacker next-attacker phase next-phase)
-            (transition-fn e)
-            e)))
+  (let [r (sc/to-root e)
+        turn (sc/select r [:#turn])
+        attacker (sc/select r [:#attacker])
+        phase (sc/select r [:#phase])
+        {:keys [next-turn next-attacker new-loc], {:keys [next-phase transition-fn]} :next-phase-info} (advance-game-phase @game-zip-loc)]
+    (reset! game-zip-loc new-loc)
+    (update-time turn next-turn attacker next-attacker phase next-phase)
+    (transition-fn e)
+    e))
 
 (defn- advance-attacker [turn attacker phase]
   (fn [_] (let [{:keys [next-turn next-attacker next-phase new-loc]} (advance-game-attacker @game-zip-loc)]
@@ -326,12 +326,15 @@
     (sc/config! add-event-button :enabled? enable?)))
 
 (defn- perform-rally-phase-activations [e]
-  (sc/config! (-> e sc/to-root (sc/select [:#description])) :enabled? true)
-  (activate-white-die e)
-  (activate-colored-die e)
-  (activate-final-modifier e)
-  (activate-result e)
-  (activate-add-rally-event-button e))
+  (let [r (sc/to-root e)
+        fields (vec (map #(sc/select r (vector %)) [:#movement-factors :#movement-points :#firepower]))]
+    (sc/config! (-> r (sc/select [:#description])) :enabled? true)
+    (activate-white-die e)
+    (activate-colored-die e)
+    (activate-final-modifier e)
+    (sc/config! fields :enabled? false)
+    (activate-result e)
+    (activate-add-rally-event-button e)))
 
 (defn- perform-prep-fire-phase-activations [e]
   (let [r (sc/to-root e)
@@ -339,6 +342,9 @@
     (sc/config! (sc/select r [:#description]) :enabled? true)
     (enable-die-radio-buttons (sc/select r [:#white-die-panel]))
     (update-die-radio-buttons-enabled-state (sc/select r [:#colored-die-panel]) (not= "Wound Resolution" action-option-text))
+    (sc/config! (sc/select r [:#movement-factors]) :enabled false)
+    (sc/config! (sc/select r [:#movement-points]) :enabled false)
+    (sc/config! (sc/select r [:#firepower]) :enabled true)
     (sc/config! (sc/select r [:#final-modifier]) :enabled? true)
     (sc/config! (sc/select r [:#result]) :enabled? true)
     (activate-add-prep-fire-event-button e)))
@@ -352,41 +358,44 @@
 (defn- reset-event-panel [e]
   (let [r (sc/to-root e)
         event-panel (sc/select r [:#event-panel])
-        {:keys [action-options description white-die-panel colored-die-panel final-modifier result]} (sc/group-by-id event-panel)]
+        {:keys [action-options description white-die-panel colored-die-panel movement-factors movement-points firepower final-modifier result]} (sc/group-by-id event-panel)]
     (sc/selection! action-options 0)
     (sc/text! description "")
     (clear-die-rolls [white-die-panel colored-die-panel])
+    (sc/text! movement-factors "")
+    (sc/text! movement-points "")
+    (sc/text! firepower "")
     (sc/selection! final-modifier 0)
     (sc/text! result "")
     (perform-rally-phase-activations e)
     e))
 
-(defn- reset-sub-panel-for-rally-phase [e]
+(defn- reset-sub-phase-panel-for-rally-phase [e]
   (let [r (sc/to-root e)
-        sub-panel (sc/select r [:#sub-panel])
-        {:keys [sub-phase-label sub-phase advance-sub-phase-button rewind-sub-phase-button]} (sc/group-by-id sub-panel)]
+        sub-phase-panel (sc/select r [:#sub-phase-panel])
+        {:keys [sub-phase-label sub-phase advance-sub-phase-button rewind-sub-phase-button]} (sc/group-by-id sub-phase-panel)]
     (sc/text! sub-phase-label "Rally Sub-Phase")
     (sc/text! sub-phase "")
     (sc/text! advance-sub-phase-button "Next Rally Sub-Phase")
     (sc/text! rewind-sub-phase-button "Previous Rally Sub-Phase")
-    (sc/config! sub-panel :visible? true)
+    (sc/config! sub-phase-panel :visible? true)
     e))
 
-(defn- reset-sub-panel-for-prep-fire-phase [e]
+(defn- reset-sub-phase-panel-for-prep-fire-phase [e]
   (let [r (sc/to-root e)
-        sub-panel (sc/select r [:#sub-panel])
-        {:keys [sub-phase-label sub-phase advance-sub-phase-button rewind-sub-phase-button]} (sc/group-by-id sub-panel)]
+        sub-phase-panel (sc/select r [:#sub-phase-panel])
+        {:keys [sub-phase-label sub-phase advance-sub-phase-button rewind-sub-phase-button]} (sc/group-by-id sub-phase-panel)]
     (sc/text! sub-phase-label "Prep Fire Sub-Phase")
     (sc/text! sub-phase "")
     (sc/text! advance-sub-phase-button "Next Prep Fire Sub-Phase")
     (sc/text! rewind-sub-phase-button "Previous Prep Fire Sub-Phase")
-    (sc/config! sub-panel :visible? false)
+    (sc/config! sub-phase-panel :visible? false)
     e))
 
-(defn- update-sub-panel [e next-sub-phase advance-sub-phase-button-enabled? rewind-sub-phase-button-enabled?]
+(defn- update-sub-phase-panel [e next-sub-phase advance-sub-phase-button-enabled? rewind-sub-phase-button-enabled?]
   (let [r (sc/to-root e)
-        sub-panel (sc/select r [:#sub-panel])
-        {:keys [sub-phase advance-sub-phase-button rewind-sub-phase-button]} (sc/group-by-id sub-panel)]
+        sub-phase-panel (sc/select r [:#sub-phase-panel])
+        {:keys [sub-phase advance-sub-phase-button rewind-sub-phase-button]} (sc/group-by-id sub-phase-panel)]
     (sc/text! sub-phase next-sub-phase)
     (sc/config! advance-sub-phase-button :enabled? advance-sub-phase-button-enabled?)
     (sc/config! rewind-sub-phase-button :enabled? rewind-sub-phase-button-enabled?)
@@ -402,46 +411,46 @@
 
 (defn- transition-to-rally-phase-reinforcements [e next-rally-phase]
   (-> e
-      reset-sub-panel-for-rally-phase
-      (update-sub-panel next-rally-phase true false)
+      reset-sub-phase-panel-for-rally-phase
+      (update-sub-phase-panel next-rally-phase true false)
       (establish-action-options ["Place Reinforcements"] false)
       reset-event-panel))
 
 (defn- transition-to-rally-phase-recovery [e next-rally-phase]
   (-> e
-      (update-sub-panel next-rally-phase true true)
+      (update-sub-phase-panel next-rally-phase true true)
       (establish-action-options ["Recover SW"] false)
       reset-event-panel))
 
 (defn- transition-to-rally-phase-repair [e next-rally-phase]
   (-> e
-      (update-sub-panel next-rally-phase true true)
+      (update-sub-phase-panel next-rally-phase true true)
       (establish-action-options ["Repair SW"] false)
       reset-event-panel))
 
 (defn- transition-to-rally-phase-transfer [e next-rally-phase]
   (-> e
-      (update-sub-panel next-rally-phase true true)
+      (update-sub-phase-panel next-rally-phase true true)
       (establish-action-options ["Transfer SW"] false)
       reset-event-panel))
 
 (defn- transition-to-rally-phase-self-rally [e next-rally-phase]
   (-> e
-      (update-sub-panel next-rally-phase true true)
+      (update-sub-phase-panel next-rally-phase true true)
       (establish-action-options ["Self Rally" "Wound Resolution" "Leader Creation"] true)
       reset-event-panel))
 
 (defn- transition-to-rally-phase-unit-rally [e next-rally-phase]
   (-> e
-      (update-sub-panel next-rally-phase true true)
+      (update-sub-phase-panel next-rally-phase true true)
       (establish-action-options ["Unit Rally" "Wound Resolution"] true)
       reset-event-panel))
 
-(defn- transition-to-prep-fire [e _]
+(defn- transition-to-prep-fire [e & rest]
   (-> e
-      reset-sub-panel-for-prep-fire-phase
-      (update-sub-panel "" false false)
-      (establish-action-options ["Prep Fire" "Morale Check" "Pin Task Check" "Wound Resolution"] true)
+      reset-sub-phase-panel-for-prep-fire-phase
+      (update-sub-phase-panel "" false false)
+      (establish-action-options ["Prep Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Other"] true)
       reset-event-panel))
 
 (defn- add-event [e]
@@ -486,15 +495,16 @@
                         (sm/mig-panel :id :phase-panel :constraints [] :items [[phase-line "span 2, align center, wrap"]
                                                                                [advance-phase-button] [rewind-phase-button]])
 
-                        (sm/mig-panel :id :game-position-panel :constraints [] :items [[turn-panel] [attacker-panel] [phase-panel]])
-
                         (sc/label :id :sub-phase-label :text "Rally Sub-Phase:")
                         (sc/label :id :sub-phase)
                         (sm/mig-panel :id :sub-phase-line :constraints ["" "nogrid" ""] :items [[sub-phase-label] [sub-phase "grow"]])
                         (sc/button :id :advance-sub-phase-button :text "Next Rally Sub-Phase")
                         (sc/button :id :rewind-sub-phase-button :text "Previous Rally Sub-Phrase")
-                        (sm/mig-panel :id :sub-panel :constraints [] :items [[sub-phase-line "span 2, align center, wrap"]
+                        (sm/mig-panel :id :sub-phase-panel :constraints [] :items [[sub-phase-line "span 2, align center, wrap"]
                                                                                [advance-sub-phase-button] [rewind-sub-phase-button]])
+
+                        (sm/mig-panel :id :game-position-panel :constraints [] :items [[turn-panel] [attacker-panel, "wrap"]
+                                                                                       [phase-panel] [sub-phase-panel]])
 
                         (sc/combobox :id :action-options)
                         (sc/text :id :description :text "")
@@ -506,18 +516,23 @@
                                       :constraints ["fill, insets 0"]
                                       :items (:radio-buttons colored-die-info)
                                       :user-data {:color colored :button-group (:button-group colored-die-info)})
+                        (sc/label :id :movement-factors-label :text "MF:" :halign :right)
+                        (sc/text :id :movement-factors :text "")
+                        (sc/label :id :movement-points-label :text "MP:" :halign :right)
+                        (sc/text :id :movement-points :text "")
+                        (sc/label :id :firepower-label :text "FP:" :halign :right)
+                        (sc/text :id :firepower :text "")
                         (sc/spinner :id :final-modifier :model (sc/spinner-model 0 :from -10 :to 10 :by 1))
                         (sc/text :id :result)
                         (sc/button :id :add-event-button :text "Add event")
-                        (sm/mig-panel :id :event-panel :constraints ["" "[|fill, grow]" ""] :items [["Action:" "align right"] [action-options "wrap"]
-                                                                                                    ["Description:" "align right"] [description "wrap"]
+                        (sm/mig-panel :id :event-panel :constraints ["" "[|fill, grow]" ""] :items [["Action:" "align right"] [action-options "span, wrap"]
+                                                                                                    ["Description:" "align right"] [description "span, wrap"]
                                                                                                     ["White Die:" "align right"] [white-die-panel "span, wrap"]
                                                                                                     ["Colored Die:" "align right"] [colored-die-panel "span, wrap"]
-                                                                                                    ["Final Modifier:" "align right"] [final-modifier "wrap"]
-                                                                                                    ["Result:" "align right"] [result "wrap"]
+                                                                                                    [movement-factors-label "grow"] [movement-factors] [movement-points-label] [movement-points] [firepower-label] [firepower "wrap"]
+                                                                                                    ["Final Modifier:" "align right"] [final-modifier "span, wrap"]
+                                                                                                    ["Result:" "align right"] [result "span, wrap"]
                                                                                                     [add-event-button "span, align center"]])
-
-                        (sm/mig-panel :id :game-event-panel :constraints ["" "[|fill, grow]" ""] :items [[sub-panel] [event-panel]])
 
                         (sc/button :id :ok :text "OK" :enabled? false)]
                        (let [ok-fn (fn [e] (process-the-game e))]
@@ -536,7 +551,7 @@
 
                          (-> (sc/frame :title "ASL Recorder",
                                        :content (sm/mig-panel :constraints [] :items [[game-position-panel "wrap"]
-                                                                                      [game-event-panel "growx, wrap"]
+                                                                                      [event-panel "growx, wrap"]
                                                                                       [ok "align center"]]),
                                        :on-close :exit)
                              (transition-to-rally-phase-reinforcements "Reinforcements")
