@@ -208,13 +208,13 @@
        ["one" "two" "three" "four" "five" "six"]
        (range 1 7)))
 
-(defn create-die-radio-buttons [prefix]
-  (let [the-info (create-die-info prefix)
-        the-class (keyword (str prefix "-" "die-class"))
+(defn create-die-radio-buttons [color]
+  (let [the-info (create-die-info color)
+        the-class (keyword (str color "-" "die-class"))
         the-button-group (sc/button-group)
         the-radio-buttons (for [{:keys [id text user-data]} the-info]
                             (vector (sc/radio :id id :class the-class :text text :group the-button-group :user-data user-data)))]
-    {:button-group the-button-group :radio-buttons the-radio-buttons}))
+    {:color color :button-group the-button-group :radio-buttons the-radio-buttons}))
 
 (defn- update-die-radio-buttons-enabled-state [die-panel enabled?]
   (let [the-info (create-die-info (-> die-panel sc/user-data :color))
@@ -325,6 +325,19 @@
                       :else (and description-text? white-die-selected? colored-die-selected? result-text?))]
     (sc/config! add-event-button :enabled? enable?)))
 
+(defn- switch-event-panel-visibility [e]
+  (let [r (sc/to-root e)
+        action-option-text (-> r (sc/select [:#action-options]) sc/selection)
+        event-panel (sc/select r [:#event-panel])
+        {:keys [standard-event-panel random-event-panel]} (sc/group-by-id event-panel)]
+    (if (= "Random Selection" action-option-text)
+      (do
+        (sc/hide! standard-event-panel)
+        (sc/show! random-event-panel))
+      (do
+        (sc/hide! random-event-panel)
+        (sc/show! standard-event-panel)))))
+
 (defn- perform-rally-phase-activations [e]
   (let [r (sc/to-root e)
         fields (vec (map #(sc/select r (vector %)) [:#movement-factors :#movement-points :#firepower]))]
@@ -342,12 +355,13 @@
     (sc/config! (sc/select r [:#description]) :enabled? true)
     (enable-die-radio-buttons (sc/select r [:#white-die-panel]))
     (update-die-radio-buttons-enabled-state (sc/select r [:#colored-die-panel]) (not= "Wound Resolution" action-option-text))
-    (sc/config! (sc/select r [:#movement-factors]) :enabled false)
-    (sc/config! (sc/select r [:#movement-points]) :enabled false)
-    (sc/config! (sc/select r [:#firepower]) :enabled true)
+    (sc/config! (sc/select r [:#movement-factors]) :enabled? false)
+    (sc/config! (sc/select r [:#movement-points]) :enabled? false)
+    (sc/config! (sc/select r [:#firepower]) :enabled? (= "Prep Fire" action-option-text))
     (sc/config! (sc/select r [:#final-modifier]) :enabled? true)
     (sc/config! (sc/select r [:#result]) :enabled? true)
-    (activate-add-prep-fire-event-button e)))
+    (activate-add-prep-fire-event-button e)
+    (switch-event-panel-visibility e)))
 
 (defn- perform-activations [e]
   (let [r (sc/to-root e)
@@ -370,26 +384,13 @@
     (perform-rally-phase-activations e)
     e))
 
-(defn- reset-sub-phase-panel-for-rally-phase [e]
+(defn- switch-sub-phase-panel-visibility [e]
   (let [r (sc/to-root e)
         sub-phase-panel (sc/select r [:#sub-phase-panel])
-        {:keys [sub-phase-label sub-phase advance-sub-phase-button rewind-sub-phase-button]} (sc/group-by-id sub-phase-panel)]
-    (sc/text! sub-phase-label "Rally Sub-Phase")
-    (sc/text! sub-phase "")
-    (sc/text! advance-sub-phase-button "Next Rally Sub-Phase")
-    (sc/text! rewind-sub-phase-button "Previous Rally Sub-Phase")
-    (sc/config! sub-phase-panel :visible? true)
-    e))
-
-(defn- reset-sub-phase-panel-for-prep-fire-phase [e]
-  (let [r (sc/to-root e)
-        sub-phase-panel (sc/select r [:#sub-phase-panel])
-        {:keys [sub-phase-label sub-phase advance-sub-phase-button rewind-sub-phase-button]} (sc/group-by-id sub-phase-panel)]
-    (sc/text! sub-phase-label "Prep Fire Sub-Phase")
-    (sc/text! sub-phase "")
-    (sc/text! advance-sub-phase-button "Next Prep Fire Sub-Phase")
-    (sc/text! rewind-sub-phase-button "Previous Prep Fire Sub-Phase")
-    (sc/config! sub-phase-panel :visible? false)
+        phase-text (-> r (sc/select [:#phase]) sc/text)]
+    (if (= "Rally" phase-text)
+      (sc/show! sub-phase-panel)
+      (sc/hide! sub-phase-panel))
     e))
 
 (defn- update-sub-phase-panel [e next-sub-phase advance-sub-phase-button-enabled? rewind-sub-phase-button-enabled?]
@@ -411,7 +412,7 @@
 
 (defn- transition-to-rally-phase-reinforcements [e next-rally-phase]
   (-> e
-      reset-sub-phase-panel-for-rally-phase
+      switch-sub-phase-panel-visibility
       (update-sub-phase-panel next-rally-phase true false)
       (establish-action-options ["Place Reinforcements"] false)
       reset-event-panel))
@@ -448,9 +449,9 @@
 
 (defn- transition-to-prep-fire [e & rest]
   (-> e
-      reset-sub-phase-panel-for-prep-fire-phase
+      switch-sub-phase-panel-visibility
       (update-sub-phase-panel "" false false)
-      (establish-action-options ["Prep Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Other"] true)
+      (establish-action-options ["Prep Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Random Selection" "Other"] true)
       reset-event-panel))
 
 (defn- add-event [e]
@@ -473,7 +474,13 @@
   [& args]
   (sc/invoke-later
     (let [white-die-info (create-die-radio-buttons white)
-          colored-die-info (create-die-radio-buttons colored)]
+          colored-die-info (create-die-radio-buttons colored)
+          random-dice-panels (map (fn [{:keys [color radio-buttons button-group]}] (sm/mig-panel :id (keyword (str color "-die-panel"))
+                                                                                                 :constraints ["fill, insets 0"]
+                                                                                                 :items radio-buttons
+                                                                                                 :user-data {:color color :button-group button-group}))
+                                  (map (fn [c] (create-die-radio-buttons c))
+                                       (map (fn [n] (str "color-" n)) (range 1 11))))]
       (sc/with-widgets [(sc/label :id :turn :text "1")
                         (sm/mig-panel :id :turn-line :constraints ["" "nogrid" ""] :items [["Turn:"] [turn "grow"]])
                         (sc/button :id :advance-turn-button :text "Next Turn")
@@ -499,15 +506,13 @@
                         (sc/label :id :sub-phase)
                         (sm/mig-panel :id :sub-phase-line :constraints ["" "nogrid" ""] :items [[sub-phase-label] [sub-phase "grow"]])
                         (sc/button :id :advance-sub-phase-button :text "Next Rally Sub-Phase")
-                        (sc/button :id :rewind-sub-phase-button :text "Previous Rally Sub-Phrase")
+                        (sc/button :id :rewind-sub-phase-button :text "Previous Rally Sub-Phase")
                         (sm/mig-panel :id :sub-phase-panel :constraints [] :items [[sub-phase-line "span 2, align center, wrap"]
-                                                                               [advance-sub-phase-button] [rewind-sub-phase-button]])
+                                                                                   [advance-sub-phase-button] [rewind-sub-phase-button]])
 
                         (sm/mig-panel :id :game-position-panel :constraints [] :items [[turn-panel] [attacker-panel, "wrap"]
                                                                                        [phase-panel] [sub-phase-panel]])
 
-                        (sc/combobox :id :action-options)
-                        (sc/text :id :description :text "")
                         (sm/mig-panel :id :white-die-panel
                                       :constraints ["fill, insets 0"]
                                       :items (:radio-buttons white-die-info)
@@ -523,14 +528,25 @@
                         (sc/label :id :firepower-label :text "FP:" :halign :right)
                         (sc/text :id :firepower :text "")
                         (sc/spinner :id :final-modifier :model (sc/spinner-model 0 :from -10 :to 10 :by 1))
+                        (sm/mig-panel :id :standard-event-panel :constraints ["" "[|fill, grow]" ""] :items [["White Die:" "align right"] [white-die-panel "span, wrap"]
+                                                                                                       ["Colored Die:" "align right"] [colored-die-panel "span, wrap"]
+                                                                                                       [movement-factors-label "grow"] [movement-factors] [movement-points-label] [movement-points] [firepower-label] [firepower "wrap"]
+                                                                                                       ["Final Modifier:" "align right"] [final-modifier "span, wrap"]])
+
+                        (sc/spinner :id :number-dice :model (sc/spinner-model 2 :from 2 :to 10 :by 1))
+                        (sm/mig-panel :id :random-event-panel :visible? false :constraints ["" "[|fill, grow]" ""] :items (into [["Number dice:" "align right"] [number-dice "span, wrap"]]
+                                                                                                          (apply concat (map (fn [rd] (vector (vector (str (:color (sc/user-data rd)) " Die:") "align right")
+                                                                                                                                              (vector rd "span, wrap")))
+                                                                                                                             random-dice-panels))))
+
+                        (sc/combobox :id :action-options)
+                        (sc/text :id :description :text "")
                         (sc/text :id :result)
                         (sc/button :id :add-event-button :text "Add event")
                         (sm/mig-panel :id :event-panel :constraints ["" "[|fill, grow]" ""] :items [["Action:" "align right"] [action-options "span, wrap"]
                                                                                                     ["Description:" "align right"] [description "span, wrap"]
-                                                                                                    ["White Die:" "align right"] [white-die-panel "span, wrap"]
-                                                                                                    ["Colored Die:" "align right"] [colored-die-panel "span, wrap"]
-                                                                                                    [movement-factors-label "grow"] [movement-factors] [movement-points-label] [movement-points] [firepower-label] [firepower "wrap"]
-                                                                                                    ["Final Modifier:" "align right"] [final-modifier "span, wrap"]
+                                                                                                    [standard-event-panel "hidemode 3, span, wrap, grow"]
+                                                                                                    [random-event-panel "hidemode 3, span, wrap, grow"]
                                                                                                     ["Result:" "align right"] [result "span, wrap"]
                                                                                                     [add-event-button "span, align center"]])
 
