@@ -68,18 +68,36 @@
 
 (def white "white")
 (def colored "colored")
+(def random-label "-random-label")
+(def random-die-panel "-random-die-panel")
 
-(def random-dice-info (apply conj [{:color white
-                                    :label-id (str white "-random-label")
-                                    :label-text "White Die:"
-                                    :panel-id (str white "-random-die-panel")
-                                    :visible? true}]
+(defn- create-random-dice-label-id [color]
+  (keyword (str color random-label)))
+
+(defn- create-random-dice-label-id-select [color]
+  (keyword (str "#" color random-label)))
+
+(defn- create-random-dice-panel-id [color]
+  (keyword (str color random-die-panel)))
+
+(defn- create-random-dice-panel-id-select [color]
+  (keyword (str "#" color random-die-panel)))
+
+(def random-dice-info (apply conj [{:color           white
+                                    :label-id        (create-random-dice-label-id white)
+                                    :label-id-select (create-random-dice-label-id-select white)
+                                    :label-text      "White Die:"
+                                    :panel-id        (create-random-dice-panel-id white)
+                                    :panel-id-select (create-random-dice-panel-id-select white)
+                                    :visible?        true}]
                              (map (fn [n] (let [color (str "colored-" n)]
-                                            {:color             color
-                                             :label-id          (keyword (str color "-random-label"))
-                                             :label-text        (str "Colored " n " Die:")
-                                             :panel-id          (keyword (str color "-random-die-panel"))
-                                             :visible?          (if (= 1 n) true false)}))
+                                            {:color           color
+                                             :label-id        (create-random-dice-label-id color)
+                                             :label-id-select (create-random-dice-label-id-select color)
+                                             :label-text      (str "Colored " n " Die:")
+                                             :panel-id        (create-random-dice-panel-id color)
+                                             :panel-id-select (create-random-dice-panel-id-select color)
+                                             :visible?        (if (= 1 n) true false)}))
                                   (range 1 10))))
 
 (defn- process-the-game [e])
@@ -326,7 +344,22 @@
                       :else false)]
     (sc/config! add-event-button :enabled? enable?)))
 
-(defn- activate-add-prep-fire-event-button [e]
+(defn- activate-add-prep-fire-event-button-for-random-selection [e]
+  (let [r (sc/to-root e)
+        add-event-button (sc/select r [:#add-event-button])
+        description-text? (-> r (sc/select [:#description]) sc/text string/blank? not)
+        number-dice-selection (-> r (sc/select [:#number-dice]) sc/selection)
+        select-die-panel (fn [v] (sc/select r v))
+        all-dice-selected? (every? selected-die-radio-button? (->> random-dice-info
+                                                                   (take number-dice-selection)
+                                                                   (map :panel-id-select)
+                                                                   (map vector)
+                                                                   (map select-die-panel)))
+        result-text? (-> r (sc/select [:#result]) sc/text string/blank? not)
+        enable? (and description-text? all-dice-selected? result-text?)]
+    (sc/config! add-event-button :enabled? enable?)))
+
+(defn- activate-add-prep-fire-event-button-for-remaining-actions [e]
   (let [r (sc/to-root e)
         add-event-button (sc/select r [:#add-event-button])
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)
@@ -337,19 +370,6 @@
         enable? (cond (= "Wound Resolution" action-option-text) (and description-text? white-die-selected? result-text?)
                       :else (and description-text? white-die-selected? colored-die-selected? result-text?))]
     (sc/config! add-event-button :enabled? enable?)))
-
-(defn- switch-event-panel-visibility [e]
-  (let [r (sc/to-root e)
-        action-option-text (-> r (sc/select [:#action-options]) sc/selection)
-        event-panel (sc/select r [:#event-panel])
-        {:keys [standard-event-panel random-event-panel]} (sc/group-by-id event-panel)]
-    (if (= "Random Selection" action-option-text)
-      (do
-        (sc/hide! standard-event-panel)
-        (sc/show! random-event-panel))
-      (do
-        (sc/hide! random-event-panel)
-        (sc/show! standard-event-panel)))))
 
 (defn- perform-rally-phase-activations [e]
   (let [r (sc/to-root e)
@@ -362,10 +382,40 @@
     (activate-result e)
     (activate-add-rally-event-button e)))
 
-(defn- perform-prep-fire-phase-activations [e]
+(defn- update-random-dice [e id enabled? rdi]
+  (let [r (sc/to-root e)]
+    (->> rdi
+         (map #(comp (partial sc/select r) vector id))
+         (map #(sc/config! % :enabled? enabled?)))))
+
+(defn- perform-prep-fire-phase-activations-for-random-selection [e]
+  (let [r (sc/to-root e)
+        number-dice-selection (-> r (sc/select [:#number-dice]) sc/selection)]
+    (sc/config! (sc/select r [:#description]) :enabled? true)
+    (sc/hide! (sc/select r [:#standard-event-panel]))
+    (sc/show! (sc/select r [:#random-event-panel]))
+    (sc/config! (sc/select r [:#number-dice]) :enabled? true)
+    (->> random-dice-info
+         (take number-dice-selection)
+         (update-random-dice e :label-id-select true))
+    (->> random-dice-info
+         (drop number-dice-selection)
+         (update-random-dice e :label-id-select false))
+    (->> random-dice-info
+         (take number-dice-selection)
+         (update-random-dice e :panel-id-select true))
+    (->> random-dice-info
+         (drop number-dice-selection)
+         (update-random-dice e :panel-id-select false))
+    (sc/config! (sc/select r [:#result]) :enabled? true)
+    (activate-add-prep-fire-event-button-for-random-selection e)))
+
+(defn- perform-prep-fire-phase-activations-for-remaining-actions [e]
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
     (sc/config! (sc/select r [:#description]) :enabled? true)
+    (sc/hide! (sc/select r [:#random-event-panel]))
+    (sc/show! (sc/select r [:#standard-event-panel]))
     (enable-die-radio-buttons (sc/select r [:#white-die-panel]))
     (update-die-radio-buttons-enabled-state (sc/select r [:#colored-die-panel]) (not= "Wound Resolution" action-option-text))
     (sc/config! (sc/select r [:#movement-factors]) :enabled? false)
@@ -373,8 +423,14 @@
     (sc/config! (sc/select r [:#firepower]) :enabled? (= "Prep Fire" action-option-text))
     (sc/config! (sc/select r [:#final-modifier]) :enabled? true)
     (sc/config! (sc/select r [:#result]) :enabled? true)
-    (activate-add-prep-fire-event-button e)
-    (switch-event-panel-visibility e)))
+    (activate-add-prep-fire-event-button-for-remaining-actions e)))
+
+(defn- perform-prep-fire-phase-activations [e]
+  (let [r (sc/to-root e)
+        action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
+    (if (= "Random Selection" action-option-text)
+      (perform-prep-fire-phase-activations-for-random-selection e)
+      (perform-prep-fire-phase-activations-for-remaining-actions e))))
 
 (defn- perform-activations [e]
   (let [r (sc/to-root e)
@@ -385,16 +441,19 @@
 (defn- reset-event-panel [e]
   (let [r (sc/to-root e)
         event-panel (sc/select r [:#event-panel])
-        {:keys [action-options description white-die-panel colored-die-panel movement-factors movement-points firepower final-modifier result]} (sc/group-by-id event-panel)]
+        {:keys [action-options description number-dice white-die-panel colored-die-panel movement-factors movement-points firepower final-modifier result]} (sc/group-by-id event-panel)
+        select-die-panel (fn [v] (sc/select r v))]
     (sc/selection! action-options 0)
     (sc/text! description "")
+    (sc/selection! number-dice 2)
+    (clear-die-rolls (map (comp select-die-panel vector :panel-id-select) random-dice-info))
     (clear-die-rolls [white-die-panel colored-die-panel])
     (sc/text! movement-factors "")
     (sc/text! movement-points "")
     (sc/text! firepower "")
     (sc/selection! final-modifier 0)
     (sc/text! result "")
-    (perform-rally-phase-activations e)
+    (perform-activations e)
     e))
 
 (defn- switch-sub-phase-panel-visibility [e]
@@ -574,8 +633,12 @@
                          (sc/listen advance-sub-phase-button :action advance-sub-phase)
                          (sc/listen action-options :selection perform-activations)
                          (sc/listen description :document (fn [_] (perform-activations description)))
+                         (sc/listen number-dice :change perform-activations)
                          (add-change-listener-to-die-radio-buttons white-die-panel perform-activations)
                          (add-change-listener-to-die-radio-buttons colored-die-panel perform-activations)
+                         (dorun (map #(add-change-listener-to-die-radio-buttons % perform-activations)
+                                     (map (fn [v] (sc/select random-event-panel v))
+                                          (map vector (map :panel-id-select random-dice-info)))))
                          ;                         (sc/listen final-modifier :change perform-activations)
                          (sc/listen result :document (fn [_] (perform-activations result)))
                          (sc/listen add-event-button :action add-event)
