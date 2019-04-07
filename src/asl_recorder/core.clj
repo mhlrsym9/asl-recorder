@@ -69,6 +69,19 @@
 (def white "white")
 (def colored "colored")
 
+(def random-dice-info (apply conj [{:color white
+                                    :label-id (str white "-random-label")
+                                    :label-text "White Die:"
+                                    :panel-id (str white "-random-die-panel")
+                                    :visible? true}]
+                             (map (fn [n] (let [color (str "colored-" n)]
+                                            {:color             color
+                                             :label-id          (keyword (str color "-random-label"))
+                                             :label-text        (str "Colored " n " Die:")
+                                             :panel-id          (keyword (str color "-random-die-panel"))
+                                             :visible?          (if (= 1 n) true false)}))
+                                  (range 1 10))))
+
 (defn- process-the-game [e])
 
 (defn- update-time [turn next-turn attacker next-attacker phase next-phase]
@@ -475,12 +488,15 @@
   (sc/invoke-later
     (let [white-die-info (create-die-radio-buttons white)
           colored-die-info (create-die-radio-buttons colored)
-          random-dice-panels (map (fn [{:keys [color radio-buttons button-group]}] (sm/mig-panel :id (keyword (str color "-die-panel"))
-                                                                                                 :constraints ["fill, insets 0"]
-                                                                                                 :items radio-buttons
-                                                                                                 :user-data {:color color :button-group button-group}))
-                                  (map (fn [c] (create-die-radio-buttons c))
-                                       (map (fn [n] (str "color-" n)) (range 1 11))))]
+          random-dice-colors (map (fn [{:keys [color] :as rdi}] (assoc rdi :die-radio-buttons (create-die-radio-buttons color))) random-dice-info)
+          random-dice-labels (map (fn [{:keys [label-id label-text visible?]}] (sc/label :id label-id :text label-text :visible? visible?)) random-dice-colors)
+          random-dice-panels (map (fn [{:keys [color visible? panel-id], {:keys [radio-buttons button-group]} :die-radio-buttons}]
+                                    (sm/mig-panel :id panel-id
+                                                  :visible? visible?
+                                                  :constraints ["fill, insets 0"]
+                                                  :items radio-buttons
+                                                  :user-data {:color color :button-group button-group}))
+                                  random-dice-colors)]
       (sc/with-widgets [(sc/label :id :turn :text "1")
                         (sm/mig-panel :id :turn-line :constraints ["" "nogrid" ""] :items [["Turn:"] [turn "grow"]])
                         (sc/button :id :advance-turn-button :text "Next Turn")
@@ -529,15 +545,15 @@
                         (sc/text :id :firepower :text "")
                         (sc/spinner :id :final-modifier :model (sc/spinner-model 0 :from -10 :to 10 :by 1))
                         (sm/mig-panel :id :standard-event-panel :constraints ["" "[|fill, grow]" ""] :items [["White Die:" "align right"] [white-die-panel "span, wrap"]
-                                                                                                       ["Colored Die:" "align right"] [colored-die-panel "span, wrap"]
-                                                                                                       [movement-factors-label "grow"] [movement-factors] [movement-points-label] [movement-points] [firepower-label] [firepower "wrap"]
-                                                                                                       ["Final Modifier:" "align right"] [final-modifier "span, wrap"]])
+                                                                                                             ["Colored Die:" "align right"] [colored-die-panel "span, wrap"]
+                                                                                                             [movement-factors-label "grow"] [movement-factors] [movement-points-label] [movement-points] [firepower-label] [firepower "wrap"]
+                                                                                                             ["Final Modifier:" "align right"] [final-modifier "span, wrap"]])
 
                         (sc/spinner :id :number-dice :model (sc/spinner-model 2 :from 2 :to 10 :by 1))
                         (sm/mig-panel :id :random-event-panel :visible? false :constraints ["" "[|fill, grow]" ""] :items (into [["Number dice:" "align right"] [number-dice "span, wrap"]]
-                                                                                                          (apply concat (map (fn [rd] (vector (vector (str (:color (sc/user-data rd)) " Die:") "align right")
-                                                                                                                                              (vector rd "span, wrap")))
-                                                                                                                             random-dice-panels))))
+                                                                                                                                (mapcat (fn [rdl rdp] (vector (vector rdl "align right, hidemode 3")
+                                                                                                                                                              (vector rdp "span, wrap, hidemode 3")))
+                                                                                                                                        random-dice-labels random-dice-panels)))
 
                         (sc/combobox :id :action-options)
                         (sc/text :id :description :text "")
