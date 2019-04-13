@@ -1,4 +1,4 @@
-(ns scrub-e.swing-worker
+(ns asl-recorder.swing-worker
   (:gen-class
     :main false
     :extends javax.swing.SwingWorker

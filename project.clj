@@ -10,5 +10,6 @@
                  [seesaw "1.5.0"]                           ; UI
                  ]
   :main ^:skip-aot asl-recorder.core
+  :aot [asl-recorder.swing-worker]
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})

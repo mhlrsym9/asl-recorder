@@ -48,15 +48,15 @@
 
 (deftest test-advance-game-rally-phase
   (testing "Try out advance-game-rally-phase"
-    (let [r (advance-game-rally-phase @game-zip-loc "Reinforcements")]
-      (is (= "ATTACKER Recovery" (get-in r [:next-rally-phase-info :next-rally-phase]))))))
+    (let [r (advance-game-sub-phase @game-zip-loc "Reinforcements" rally-phase-map)]
+      (is (= "ATTACKER Recovery" (get-in r [:next-sub-phase-info :next-sub-phase]))))))
 
 (deftest test-advance-game-through-rally-phase
   (testing "Try out advance-game-rally-phase until all sub-phases added."
-    (let [advance-results (take 12 (iterate (fn [{:keys [new-loc] {:keys [next-rally-phase]} :next-rally-phase-info}]
-                                              (advance-game-rally-phase new-loc next-rally-phase))
-                                            {:new-loc @game-zip-loc :next-rally-phase-info {:next-rally-phase "Reinforcements"}}))
-          extract-fn (fn [r] (get-in r [:next-rally-phase-info :next-rally-phase]))]
+    (let [advance-results (take 12 (iterate (fn [{:keys [new-loc] {:keys [next-sub-phase]} :next-sub-phase-info}]
+                                              (advance-game-sub-phase new-loc next-sub-phase rally-phase-map))
+                                            {:new-loc @game-zip-loc :next-sub-phase-info {:next-sub-phase "Reinforcements"}}))
+          extract-fn (fn [r] (get-in r [:next-sub-phase-info :next-sub-phase]))]
       (is (= "Reinforcements" (extract-fn (nth advance-results 0))))
       (is (= "ATTACKER Recovery" (extract-fn (nth advance-results 1))))
       (is (= "DEFENDER Recovery" (extract-fn (nth advance-results 2))))
@@ -69,7 +69,7 @@
       (is (= "ATTACKER Unit Rally" (extract-fn (nth advance-results 9))))
       (is (= "DEFENDER Unit Rally" (extract-fn (nth advance-results 10))))
       (is (= nil (extract-fn (nth advance-results 11))))
-      (is (= "Prep Fire" (:next-phase (get-game-phase (:new-loc (last advance-results)))))))))
+      (is (= "Prep Fire" (get-game-phase (:new-loc (last advance-results))))))))
 
 (deftest test-advance-game-phase
   (testing "Try out advance-game-phase"

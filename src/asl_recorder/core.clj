@@ -287,7 +287,7 @@
     (hash-map :die-roll (sc/user-data selected) :color (-> die-panel sc/user-data :color))))
 
 (defn gather-die-rolls [die-panels]
-  (filter identity (map gather-die-roll die-panels)))
+  (doall (filter identity (map gather-die-roll die-panels))))
 
 (defn- clear-die-roll [die-panel]
   (-> die-panel sc/user-data :button-group (sc/selection! false)))
@@ -783,7 +783,7 @@
         description-text (sc/text description)
         white-die-panel (-> r (sc/select [:#white-die-panel]))
         colored-die-panel (-> r (sc/select [:#colored-die-panel]))
-        random-die-panels (map (fn [pid] (sc/select r pid)) (map :panel-id-select random-dice-info))
+        random-die-panels (map (fn [pid] (sc/select r [pid])) (map :panel-id-select random-dice-info))
         die-rolls (gather-die-rolls (concat (list white-die-panel colored-die-panel) random-die-panels))
         final-modifier (sc/select r [:#final-modifier])
         final-modifier-selection (sc/selection final-modifier)
@@ -792,8 +792,49 @@
     (swap! game-zip-loc append-event sub-phase-text action-option-text description-text die-rolls final-modifier-selection result-text)
     (reset-event-panel e)))
 
+(defn- perform-file-new [e]
+  (let [r (sc/to-root e)])
+  e)
+
+(defn- perform-file-open [e])
+
+(defn- perform-file-save [e f]
+  (let [r (sc/to-root e)
+        sw (proxy [asl_recorder.swing_worker] []
+             (doInBackground []
+               (do
+                 (with-open [w (clojure.java.io/writer f)]
+                   (-> @game-zip-loc
+                       zip/root
+                       (xml/indent w)))))
+             (process [_])
+             (done []
+               (try
+                 (do
+                   (proxy-super get))
+                 (catch ExecutionException e
+                   (throw e))
+                 (finally
+                   (.setCursor r Cursor/DEFAULT_CURSOR)))))
+        pcl (proxy [PropertyChangeListener] []
+              (propertyChange [e]
+                (when (= (.getPropertyName e) "state")
+                  (let [v (.getNewValue e)]
+                    (cond
+                      (= v SwingWorker$StateValue/STARTED) (.setCursor r Cursor/WAIT_CURSOR)
+                      (= v SwingWorker$StateValue/DONE) (.setCursor r Cursor/DEFAULT_CURSOR))))))]
+    (doto sw
+      (.addPropertyChangeListener pcl)
+      (.execute))))
+
+(defn- choose-file [e]
+  (sch/choose-file (sc/to-root e) :filters [["ASL files" ["asl"]]] :all-files? false :success-fn (fn [_ f] (perform-file-save e f))))
+
+(defn- perform-file-exit [e])
+
 (defn -main
   [& args]
+  (sc/native!)
   (sc/invoke-later
     (let [white-die-info (create-die-radio-buttons white)
           colored-die-info (create-die-radio-buttons colored)
@@ -875,7 +916,11 @@
                                                                                                     ["Result:" "align right"] [result "span, wrap"]
                                                                                                     [add-event-button "span, align center"]])
 
-                        (sc/button :id :ok :text "OK" :enabled? false)]
+                        (sc/button :id :ok :text "OK" :enabled? false)
+                        (sc/menu-item :id :file-new :listen [:action perform-file-new] :text "New..." :mnemonic \N)
+                        (sc/menu-item :id :file-open :listen [:action perform-file-open] :text "Open..." :mnemonic \O)
+                        (sc/menu-item :id :file-save :listen [:action choose-file] :text "Save..." :mnemonic \S)
+                        (sc/menu-item :id :file-exit :listen [:action perform-file-exit] :text "Exit" :mnemonic \E)]
                        (let [ok-fn (fn [e] (process-the-game e))]
                          (sc/listen advance-turn-button :action advance-turn)
                          (sc/listen advance-attacker-button :action advance-attacker)
@@ -901,6 +946,7 @@
                                        :content (sm/mig-panel :constraints [] :items [[game-position-panel "wrap"]
                                                                                       [event-panel "growx, wrap"]
                                                                                       [ok "align center"]]),
+                                       :menubar (sc/menubar :items [(sc/menu :text "File" :items [file-new file-open file-save file-exit])])
                                        :on-close :exit)
                              (transition-to-rally-phase-reinforcements "Reinforcements")
                              sc/pack!
