@@ -239,15 +239,21 @@
     (transition-fn e)
     e))
 
-(defn- advance-attacker [turn attacker phase]
-  (fn [_] (let [{:keys [next-turn next-attacker next-phase new-loc]} (advance-game-attacker @game-zip-loc)]
-            (reset! game-zip-loc new-loc)
-            (update-time turn next-turn attacker next-attacker phase next-phase))))
+(defn- advance-attacker [e]
+  (let [{:keys [turn attacker phase]} (sc/group-by-id (sc/to-root e))
+        {:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info} (advance-game-attacker @game-zip-loc)]
+    (reset! game-zip-loc new-loc)
+    (update-time turn next-turn attacker next-attacker phase next-phase)
+    (transition-fn e)
+    e))
 
-(defn- advance-turn [turn attacker phase]
-  (fn [_] (let [{:keys [next-turn next-attacker next-phase new-loc]} (advance-game-turn @game-zip-loc)]
-            (reset! game-zip-loc new-loc)
-            (update-time turn next-turn attacker next-attacker phase next-phase))))
+(defn- advance-turn [e]
+  (let [{:keys [turn attacker phase]} (sc/group-by-id (sc/to-root e))
+        {:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info} (advance-game-turn @game-zip-loc)]
+    (reset! game-zip-loc new-loc)
+    (update-time turn next-turn attacker next-attacker phase next-phase)
+    (transition-fn e)
+    e))
 
 (defn- create-die-info [prefix]
   (map #(hash-map :id (keyword (str prefix "-" %1)) :text (str %2) :user-data %2)
@@ -302,55 +308,43 @@
                                             ((complement not-any?) #{action-option-text} action-options))))
 
 (defn- activate-white-die-during-rally-phase [e]
-  (activate-die-panel e ["Recover SW" "Repair SW" "Self Rally" "Wound Resolution" "Leader Creation" "Unit Rally"] :#white-die-panel))
+  (activate-die-panel e ["Recover SW" "Repair SW" "Self Rally" "Wound Resolution" "Leader Creation" "Unit Rally" "Other"] :#white-die-panel))
 
 (defn- activate-colored-die-during-rally-phase [e]
-  (activate-die-panel e ["Self Rally" "Unit Rally"] :#colored-die-panel))
+  (activate-die-panel e ["Self Rally" "Unit Rally" "Other"] :#colored-die-panel))
 
 (defn- activate-final-modifier-during-rally-phase [e]
   (let [r (sc/to-root e)
-        action-options-text (-> r (sc/select [:#action-options]) sc/text)
-        description-text? (-> r (sc/select [:#description]) sc/text string/blank? not)
-        white-die-selected? (-> r (sc/select [:#white-die-panel]) selected-die-radio-button?)
+        action-option-text (-> r (sc/select [:#action-options]) sc/text)
         final-modifier (sc/select r [:#final-modifier])
-        enabled? (cond (some #{action-options-text} ["Recover SW" "Repair SW"])
-                       (and description-text? white-die-selected?)
-                       (some #{action-options-text} ["Self Rally" "Unit Rally"])
-                       true
-                      :else false)]
+        enabled? ((complement not-any?) #{action-option-text} ["Recover SW" "Repair SW" "Self Rally" "Unit Rally" "Other"])]
     (sc/config! final-modifier :enabled? enabled?)))
 
 (defn- activate-result-during-rally-phase [e]
   (let [r (sc/to-root e)
-        action-options-text (-> r (sc/select [:#action-options]) sc/text)
-        description-text? (-> r (sc/select [:#description]) sc/text string/blank? not)
-        white-die-selected? (-> r (sc/select [:#white-die-panel]) selected-die-radio-button?)
+        action-option-text (-> r (sc/select [:#action-options]) sc/text)
         result (sc/select r [:#result])
-        enabled? (cond (some #{action-options-text} ["Recover SW" "Repair SW"])
-                       (and description-text? white-die-selected?)
-                       (some #{action-options-text} ["Self Rally" "Unit Rally"])
-                       true
-                       :else false)]
+        enabled? ((complement not-any?) #{action-option-text} ["Recover SW" "Repair SW" "Self Rally" "Unit Rally" "Other"])]
     (sc/config! result :enabled? enabled?)))
 
 (defn- activate-event-button-during-rally-phase [e]
   (let [r (sc/to-root e)
         add-event-button (sc/select r [:#add-event-button])
-        action-options-text (-> r (sc/select [:#action-options]) sc/selection)
+        action-option-text (-> r (sc/select [:#action-options]) sc/selection)
         description-text? (-> r (sc/select [:#description]) sc/text string/blank? not)
         white-die-selected? (-> r (sc/select [:#white-die-panel]) selected-die-radio-button?)
         colored-die-selected? (-> r (sc/select [:#colored-die-panel]) selected-die-radio-button?)
+        final-modifier-text (-> r (sc/select [:#final-modifier]) sc/selection)
         result-text? (-> r (sc/select [:#result]) sc/text string/blank? not)
-        enable? (cond (some #{action-options-text} ["Place Reinforcements" "Transfer SW"])
+        enable? (cond (some #{action-option-text} ["Place Reinforcements" "Transfer SW"])
                       description-text?
-                      (some #{action-options-text} ["Recover SW" "Repair SW"])
-                      (and description-text? (or (not white-die-selected?)
-                                                 (and white-die-selected? result-text?)))
-                      (some #{action-options-text} ["Self Rally" "Unit Rally"])
+                      (some #{action-option-text} ["Recover SW" "Repair SW"])
+                      (and description-text? white-die-selected? final-modifier-text result-text?)
+                      (some #{action-option-text} ["Self Rally" "Unit Rally"])
                       (and description-text? white-die-selected? colored-die-selected? result-text?)
-                      (some #{action-options-text} ["Wound Resolution" "Leader Creation"])
+                      (some #{action-option-text} ["Wound Resolution" "Leader Creation"])
                       (and description-text? white-die-selected? result-text?)
-                      (= "Other" action-options-text)
+                      (= "Other" action-option-text)
                       (or description-text? result-text?)
                       :else false)]
     (sc/config! add-event-button :enabled? enable?)))
@@ -518,14 +512,14 @@
 (defn- activate-final-modifier-during-rout-phase [e]
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
-    (sc/config! (sc/select r [:#movement-factors])
+    (sc/config! (sc/select r [:#final-modifier])
                 :enabled? ((complement not-any?) #{action-option-text} ["Interdiction" "Other"]))))
 
 (defn- activate-result-during-rout-phase [e]
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
-    (sc/config! (sc/select r [:#movement-factors])
-                :enabled? ((complement not-any?) #{action-option-text} ["Rout" "Low Crawl" "Interdiction" "Other"]))))
+    (sc/config! (sc/select r [:#result])
+                :enabled? ((complement not-any?) #{action-option-text} ["Interdiction" "Other"]))))
 
 (defn- activate-event-button-during-rout-phase [e]
   (let [r (sc/to-root e)
@@ -590,22 +584,22 @@
     (activate-event-button-during-advance-phase e)))
 
 (defn- activate-white-die-during-close-combat-phase [e]
-  (activate-die-panel e ["Ambush" "ATTACKER CC" "DEFENDER CC"] :#white-die-panel))
+  (activate-die-panel e ["Ambush" "ATTACKER CC" "DEFENDER CC" "Leader Creation" "Other"] :#white-die-panel))
 
 (defn- activate-colored-die-during-close-combat-phase [e]
-  (activate-die-panel e ["Ambush" "ATTACKER CC" "DEFENDER CC"] :#colored-die-panel))
+  (activate-die-panel e ["Ambush" "ATTACKER CC" "DEFENDER CC" "Other"] :#colored-die-panel))
 
 (defn- activate-final-modifier-during-close-combat-phase [e]
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
-    (sc/config! (sc/select r [:#movement-factors])
-                :enabled? ((complement not-any?) #{action-option-text} ["Ambush" "ATTACKER CC" "DEFENDER CC"]))))
+    (sc/config! (sc/select r [:#final-modifier])
+                :enabled? ((complement not-any?) #{action-option-text} ["Ambush" "ATTACKER CC" "DEFENDER CC" "Leader Creation" "Other"]))))
 
 (defn- activate-result-during-close-combat-phase [e]
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
-    (sc/config! (sc/select r [:#movement-factors])
-                :enabled? ((complement not-any?) #{action-option-text} ["Ambush" "ATTACKER CC" "DEFENDER CC" "Other"]))))
+    (sc/config! (sc/select r [:#result])
+                :enabled? ((complement not-any?) #{action-option-text} ["Ambush" "ATTACKER CC" "DEFENDER CC" "Leader Creation" "Other"]))))
 
 (defn- activate-event-button-for-remaining-actions-during-close-combat-phase [e]
   (let [r (sc/to-root e)
@@ -618,6 +612,8 @@
         result-text? (-> r (sc/select [:#result]) sc/text string/blank? not)
         enable? (cond (some #{action-option-text} ["Ambush" "ATTACKER CC" "DEFENDER CC"])
                       (and description-text? white-die-selected? colored-die-selected? final-modifier-text? result-text?)
+                      (= "Leader Creation" action-option-text)
+                      (and description-text? white-die-selected? final-modifier-text? result-text?)
                       (= "Other" action-option-text) (or description-text? result-text?)
                       :else false)]
     (sc/config! add-event-button :enabled? enable?)))
@@ -776,7 +772,7 @@
 
 (defn- transition-to-close-combat [e]
   (-> e
-      (establish-action-options ["Ambush" "ATTACKER CC" "DEFENDER CC" "Random Selection" "Other"])
+      (establish-action-options ["Ambush" "ATTACKER CC" "DEFENDER CC" "Leader Creation" "Random Selection" "Other"])
       reset-event-panel))
 
 (defn- add-event [e]
@@ -881,8 +877,8 @@
 
                         (sc/button :id :ok :text "OK" :enabled? false)]
                        (let [ok-fn (fn [e] (process-the-game e))]
-                         (sc/listen advance-turn-button :action (advance-turn turn attacker phase))
-                         (sc/listen advance-attacker-button :action (advance-attacker turn attacker phase))
+                         (sc/listen advance-turn-button :action advance-turn)
+                         (sc/listen advance-attacker-button :action advance-attacker)
                          (sc/listen advance-phase-button :action advance-phase)
                          (sc/listen advance-sub-phase-button :action advance-sub-phase)
                          (sc/listen action-options :selection perform-activations)
