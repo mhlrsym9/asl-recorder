@@ -6,7 +6,8 @@
             [clojure.string :as string]
             [clojure.zip :as zip]
             [asl-recorder.swing-worker]
-            [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd]])
+            [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd]]
+            [clojure.string :as str])
   (:import [java.awt Cursor]
            [java.beans PropertyChangeEvent PropertyChangeListener]
            [java.io File ByteArrayOutputStream]
@@ -61,12 +62,23 @@
 (def attacker-map {"German" "Russian"
                    "Russian" "German"})
 
-(def game (xml/element :game {:name "War of the Rats" :number-turns "6" :side1 "German" :side2 "Russian"}
-                       (xml/element :turn {:number 1}
-                                    (xml/element :side {:attacker "German"}
-                                                 (xml/element :phase {:name "Rally"})))))
+(def game-start (xml/element :game {:name "War of the Rats" :number-full-turns "6" :additional-half-turn? false :side1 "German" :side2 "Russian"}
+                             (xml/element :turn {:number 1}
+                                          (xml/element :side {:attacker "German"}
+                                                       (xml/element :phase {:name "Rally"})))))
 
-(def game-zip-loc (atom (-> game
+(def the-game (atom {:game-zip-loc (-> game-start
+                                       zip/xml-zip
+                                       zip/down
+                                       zip/rightmost
+                                       zip/down
+                                       zip/rightmost
+                                       zip/down
+                                       zip/rightmost)
+                     :is-modified? false
+                     :file-name    nil}))
+
+(def game-zip-loc (atom (-> game-start
                             zip/xml-zip
                             zip/down
                             zip/rightmost
@@ -116,20 +128,20 @@
   (sc/text! attacker next-attacker)
   (sc/text! phase next-phase))
 
-(defn append-event [loc the-type the-action-option the-description the-die-rolls the-final-modifier the-result]
+(defn append-event [loc sub-phase the-action-option the-description the-die-rolls the-final-modifier the-result]
   (let [n (zip/node loc)
-        c (conj (vec (:content n)) (xml/element :event {:type the-type}
-                                                (xml/element :action {:option the-action-option}
-                                                             (filter identity (list (xml/element :description {} the-description)
-                                                                                    (when the-die-rolls
-                                                                                      (xml/element :die-rolls {} (map #(xml/element :die-roll
-                                                                                                                                    {:color (:color %)}
-                                                                                                                                    (:die-roll %))
-                                                                                                                      the-die-rolls)))
-                                                                                    (when the-final-modifier
-                                                                                      (xml/element :final-modifier {} the-final-modifier))
-                                                                                    (when the-result
-                                                                                      (xml/element :result {} the-result)))))))]
+        sub-phase-text? (-> sub-phase str/blank? not)
+        c (conj (vec (:content n)) (xml/element :event (merge {:action the-action-option} (when sub-phase-text? {:sub-phase sub-phase}))
+                                                (filter identity (list (xml/element :description {} the-description)
+                                                                       (when the-die-rolls
+                                                                         (xml/element :die-rolls {} (map #(xml/element :die-roll
+                                                                                                                       {:color (:color %)}
+                                                                                                                       (:die-roll %))
+                                                                                                         the-die-rolls)))
+                                                                       (when the-final-modifier
+                                                                         (xml/element :final-modifier {} the-final-modifier))
+                                                                       (when the-result
+                                                                         (xml/element :result {} the-result))))))]
     (zip/replace loc (assoc n :content c))))
 
 (defn append-phase [loc the-phase]
@@ -211,14 +223,18 @@
         r
         (recur (advance-game-phase new-loc))))))
 
+(defn- update-the-game [new-loc]
+  (swap! the-game assoc :game-zip-loc new-loc :is-modified? true))
+
 (defn- perform-advance-sub-phase [e sub-phase-map]
   (let [r (sc/to-root e)
         sub-phase-text (-> r (sc/select [:#sub-phase]) sc/text)
         turn (sc/select r [:#turn])
         attacker (sc/select r [:#attacker])
         phase (sc/select r [:#phase])
-        {:keys [next-phase new-loc] {:keys [transition-fn next-sub-phase]} :next-sub-phase-info} (advance-game-sub-phase @game-zip-loc sub-phase-text sub-phase-map)]
-    (reset! game-zip-loc new-loc)
+        {:keys [next-phase new-loc] {:keys [transition-fn next-sub-phase]} :next-sub-phase-info}
+        (-> the-game deref :game-zip-loc (advance-game-sub-phase sub-phase-text sub-phase-map))]
+    (update-the-game new-loc)
     (update-time turn (sc/text turn) attacker (sc/text attacker) phase next-phase)
     (transition-fn e next-sub-phase)))
 
@@ -233,24 +249,27 @@
         turn (sc/select r [:#turn])
         attacker (sc/select r [:#attacker])
         phase (sc/select r [:#phase])
-        {:keys [next-turn next-attacker new-loc], {:keys [next-phase transition-fn]} :next-phase-info} (advance-game-phase @game-zip-loc)]
-    (reset! game-zip-loc new-loc)
+        {:keys [next-turn next-attacker new-loc], {:keys [next-phase transition-fn]} :next-phase-info}
+        (-> the-game deref :game-zip-loc advance-game-phase)]
+    (update-the-game new-loc)
     (update-time turn next-turn attacker next-attacker phase next-phase)
     (transition-fn e)
     e))
 
 (defn- advance-attacker [e]
   (let [{:keys [turn attacker phase]} (sc/group-by-id (sc/to-root e))
-        {:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info} (advance-game-attacker @game-zip-loc)]
-    (reset! game-zip-loc new-loc)
+        {:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info}
+        (-> the-game deref :game-zip-loc advance-game-attacker)]
+    (update-the-game new-loc)
     (update-time turn next-turn attacker next-attacker phase next-phase)
     (transition-fn e)
     e))
 
 (defn- advance-turn [e]
   (let [{:keys [turn attacker phase]} (sc/group-by-id (sc/to-root e))
-        {:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info} (advance-game-turn @game-zip-loc)]
-    (reset! game-zip-loc new-loc)
+        {:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info}
+        (-> the-game deref :game-zip-loc advance-game-turn)]
+    (update-the-game new-loc)
     (update-time turn next-turn attacker next-attacker phase next-phase)
     (transition-fn e)
     e))
@@ -789,7 +808,7 @@
         final-modifier-selection (sc/selection final-modifier)
         result (sc/select r [:#result])
         result-text (sc/text result)]
-    (swap! game-zip-loc append-event sub-phase-text action-option-text description-text die-rolls final-modifier-selection result-text)
+    (swap! the-game update-in [:game-zip-loc] append-event sub-phase-text action-option-text description-text die-rolls final-modifier-selection result-text)
     (reset-event-panel e)))
 
 (defn- perform-file-new [e]
@@ -804,7 +823,8 @@
              (doInBackground []
                (do
                  (with-open [w (clojure.java.io/writer f)]
-                   (-> @game-zip-loc
+                   (-> the-game
+                       deref
                        zip/root
                        (xml/indent w)))))
              (process [_])

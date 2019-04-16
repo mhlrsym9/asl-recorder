@@ -6,8 +6,8 @@
 
 (deftest test-append-event
   (testing "Try to add an event."
-    (let [new-loc (append-event @game-zip-loc "Reinforcements" "Place Reinforcements" "Add description" nil nil "Add result")
-          fe (-> new-loc zip/root zip/xml-zip zip/down zip/down zip/down zip/node :content first :content first :content first)
+    (let [new-loc (-> the-game deref :game-zip-loc (append-event "Reinforcements" "Place Reinforcements" "Add description" nil nil "Add result"))
+          fe (-> new-loc zip/root zip/xml-zip zip/down zip/down zip/down zip/node :content first :content first)
           fa (-> fe first :content first)
           fr (-> fe second :content first)]
       (is (= fa "Add description"))
@@ -15,47 +15,47 @@
 
 (deftest test-append-phase
   (testing "Try to add a phase."
-    (let [new-loc (append-phase @game-zip-loc "Prep Fire")
+    (let [new-loc (-> the-game deref :game-zip-loc (append-phase "Prep Fire"))
           fp (-> new-loc zip/root zip/xml-zip zip/down zip/down zip/node :content)]
       (is (= "Prep Fire" (-> fp second :attrs :name)))
       (is (= "Rally" (-> fp first :attrs :name))))))
 
 (deftest test-append-attacker
   (testing "Try to add an attacker."
-    (let [new-loc (append-attacker @game-zip-loc "Russian")
+    (let [new-loc (-> the-game deref :game-zip-loc (append-attacker "Russian"))
           fp (-> new-loc zip/root zip/xml-zip zip/down zip/node :content)]
       (is (= "Russian" (-> fp second :attrs :attacker)))
       (is (= "German" (-> fp first :attrs :attacker))))))
 
 (deftest test-append-turn
   (testing "Try to add an turn."
-    (let [new-loc (append-turn @game-zip-loc 2)
+    (let [new-loc (-> the-game deref :game-zip-loc (append-turn 2))
           fp (-> new-loc zip/root zip/xml-zip zip/node :content)]
       (is (= 2 (-> fp second :attrs :number)))
       (is (= 1 (-> fp first :attrs :number))))))
 
 (deftest test-get-current-game-turn
   (testing "Try to get the current game turn."
-    (is (= 1 (get-game-turn @game-zip-loc)))))
+    (is (= 1 (-> the-game deref :game-zip-loc get-game-turn)))))
 
 (deftest test-get-current-game-attacker
   (testing "Try to get the current game attacker."
-    (is (= "German" (get-game-attacker @game-zip-loc)))))
+    (is (= "German" (-> the-game deref :game-zip-loc get-game-attacker)))))
 
 (deftest test-get-current-game-phase
   (testing "Try to get the current game phase."
-    (is (= "Rally" (get-game-phase @game-zip-loc)))))
+    (is (= "Rally" (-> the-game deref :game-zip-loc get-game-phase)))))
 
 (deftest test-advance-game-rally-phase
   (testing "Try out advance-game-rally-phase"
-    (let [r (advance-game-sub-phase @game-zip-loc "Reinforcements" rally-phase-map)]
+    (let [r (-> the-game deref :game-zip-loc (advance-game-sub-phase "Reinforcements" rally-phase-map))]
       (is (= "ATTACKER Recovery" (get-in r [:next-sub-phase-info :next-sub-phase]))))))
 
 (deftest test-advance-game-through-rally-phase
   (testing "Try out advance-game-rally-phase until all sub-phases added."
     (let [advance-results (take 12 (iterate (fn [{:keys [new-loc] {:keys [next-sub-phase]} :next-sub-phase-info}]
                                               (advance-game-sub-phase new-loc next-sub-phase rally-phase-map))
-                                            {:new-loc @game-zip-loc :next-sub-phase-info {:next-sub-phase "Reinforcements"}}))
+                                            {:new-loc (-> the-game deref :game-zip-loc) :next-sub-phase-info {:next-sub-phase "Reinforcements"}}))
           extract-fn (fn [r] (get-in r [:next-sub-phase-info :next-sub-phase]))]
       (is (= "Reinforcements" (extract-fn (nth advance-results 0))))
       (is (= "ATTACKER Recovery" (extract-fn (nth advance-results 1))))
@@ -73,7 +73,7 @@
 
 (deftest test-advance-game-phase
   (testing "Try out advance-game-phase"
-    (let [{new-loc :new-loc} (advance-game-phase @game-zip-loc)
+    (let [{new-loc :new-loc} (-> the-game deref :game-zip-loc advance-game-phase)
           {new-loc-2 :new-loc} (advance-game-phase new-loc)]
       (is (= "Movement" (get-game-phase new-loc-2)))
       (is (= 3 (count (-> new-loc-2 zip/up zip/node :content)))))))
