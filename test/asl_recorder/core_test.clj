@@ -6,7 +6,7 @@
 
 (deftest test-append-event
   (testing "Try to add an event."
-    (let [new-loc (-> the-game deref :game-zip-loc (append-event "Reinforcements" "Place Reinforcements" "Add description" nil nil "Add result"))
+    (let [new-loc (-> the-game deref :game-zip-loc (append-event "Reinforcements" "Place Reinforcements" "Add description" nil nil nil nil "Add result"))
           fe (-> new-loc zip/root zip/xml-zip zip/down zip/down zip/down zip/node :content first :content first)
           fa (-> fe first :content first)
           fr (-> fe second :content first)]

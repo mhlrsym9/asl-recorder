@@ -62,7 +62,7 @@
 (def attacker-map {"German" "Russian"
                    "Russian" "German"})
 
-(def game-start (xml/element :game {:name "War of the Rats" :number-full-turns "6" :additional-half-turn? false :side1 "German" :side2 "Russian"}
+(def game-start (xml/element :game {:name "War of the Rats" :number-full-turns "6" :additional-half-turn false :side1 "German" :side2 "Russian"}
                              (xml/element :turn {:number 1}
                                           (xml/element :side {:attacker "German"}
                                                        (xml/element :phase {:name "Rally"})))))
@@ -77,15 +77,6 @@
                                        zip/rightmost)
                      :is-modified? false
                      :file-name    nil}))
-
-(def game-zip-loc (atom (-> game-start
-                            zip/xml-zip
-                            zip/down
-                            zip/rightmost
-                            zip/down
-                            zip/rightmost
-                            zip/down
-                            zip/rightmost)))
 
 (def white "white")
 (def colored "colored")
@@ -128,7 +119,7 @@
   (sc/text! attacker next-attacker)
   (sc/text! phase next-phase))
 
-(defn append-event [loc sub-phase the-action-option the-description the-die-rolls the-final-modifier the-result]
+(defn append-event [loc sub-phase the-action-option the-description the-die-rolls the-final-modifier the-attacker-final-modifier the-defender-final-modifier the-result]
   (let [n (zip/node loc)
         sub-phase-text? (-> sub-phase str/blank? not)
         c (conj (vec (:content n)) (xml/element :event (merge {:action the-action-option} (when sub-phase-text? {:sub-phase sub-phase}))
@@ -140,6 +131,10 @@
                                                                                                          the-die-rolls)))
                                                                        (when the-final-modifier
                                                                          (xml/element :final-modifier {} the-final-modifier))
+                                                                       (when the-attacker-final-modifier
+                                                                         (xml/element :attacker-final-modifier {} the-attacker-final-modifier))
+                                                                       (when the-defender-final-modifier
+                                                                         (xml/element :defender-final-modifier {} the-defender-final-modifier))
                                                                        (when the-result
                                                                          (xml/element :result {} the-result))))))]
     (zip/replace loc (assoc n :content c))))
@@ -377,7 +372,11 @@
     (activate-white-die-during-rally-phase e)
     (activate-colored-die-during-rally-phase e)
     (sc/config! fields :enabled? false)
+    (sc/hide! (sc/select r [:#split-final-modifier-panel]))
+    (sc/show! (sc/select r [:#final-modifier-panel]))
     (activate-final-modifier-during-rally-phase e)
+    (sc/config! (sc/select r [:#attacker-final-modifier]) :enabled? false)
+    (sc/config! (sc/select r [:#defender-final-modifier]) :enabled? false)
     (activate-result-during-rally-phase e)
     (activate-event-button-during-rally-phase e)))
 
@@ -505,7 +504,11 @@
     (activate-movement-factors-during-fire-phase e)
     (sc/config! (sc/select r [:#movement-points]) :enabled? false)
     (activate-firepower-during-fire-phase e)
+    (sc/hide! (sc/select r [:#split-final-modifier-panel]))
+    (sc/show! (sc/select r [:#final-modifier-panel]))
     (activate-final-modifier-during-fire-phase e)
+    (sc/config! (sc/select r [:#attacker-final-modifier]) :enabled? false)
+    (sc/config! (sc/select r [:#defender-final-modifier]) :enabled? false)
     (activate-result-during-fire-phase e)
     (activate-event-button-for-remaining-actions-during-fire-phase e)))
 
@@ -567,7 +570,11 @@
     (activate-movement-factors-during-rout-phase e)
     (sc/config! (sc/select r [:#movement-points]) :enabled? false)
     (sc/config! (sc/select r [:#firepower]) :enabled? false)
+    (sc/hide! (sc/select r [:#split-final-modifier-panel]))
+    (sc/show! (sc/select r [:#final-modifier-panel]))
     (activate-final-modifier-during-rout-phase e)
+    (sc/config! (sc/select r [:#attacker-final-modifier]) :enabled? false)
+    (sc/config! (sc/select r [:#defender-final-modifier]) :enabled? false)
     (activate-result-during-rout-phase e)
     (activate-event-button-during-rout-phase e)))
 
@@ -598,7 +605,11 @@
     (sc/config! (sc/select r [:#movement-factors]) :enabled? false)
     (sc/config! (sc/select r [:#movement-points]) :enabled? false)
     (sc/config! (sc/select r [:#firepower]) :enabled? false)
+    (sc/hide! (sc/select r [:#split-final-modifier-panel]))
+    (sc/show! (sc/select r [:#final-modifier-panel]))
     (sc/config! (sc/select r [:#final-modifier]) :enabled? false)
+    (sc/config! (sc/select r [:#attacker-final-modifier]) :enabled? false)
+    (sc/config! (sc/select r [:#defender-final-modifier]) :enabled? false)
     (activate-result-during-advance-phase e)
     (activate-event-button-during-advance-phase e)))
 
@@ -608,11 +619,13 @@
 (defn- activate-colored-die-during-close-combat-phase [e]
   (activate-die-panel e ["Ambush" "ATTACKER CC" "DEFENDER CC" "Other"] :#colored-die-panel))
 
-(defn- activate-final-modifier-during-close-combat-phase [e]
+(defn- activate-final-modifiers-during-close-combat-phase [e]
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
     (sc/config! (sc/select r [:#final-modifier])
-                :enabled? ((complement not-any?) #{action-option-text} ["Ambush" "ATTACKER CC" "DEFENDER CC" "Leader Creation" "Other"]))))
+                :enabled? ((complement not-any?) #{action-option-text} ["ATTACKER CC" "DEFENDER CC" "Leader Creation" "Other"]))
+    (sc/config! (sc/select r [:#attacker-final-modifier]) :enabled? (= "Ambush" action-option-text))
+    (sc/config! (sc/select r [:#defender-final-modifier]) :enabled? (= "Ambush" action-option-text))))
 
 (defn- activate-result-during-close-combat-phase [e]
   (let [r (sc/to-root e)
@@ -638,7 +651,8 @@
     (sc/config! add-event-button :enabled? enable?)))
 
 (defn- perform-close-combat-phase-activations-for-remaining-actions [e]
-  (let [r (sc/to-root e)]
+  (let [r (sc/to-root e)
+        action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
     (sc/config! (sc/select r [:#description]) :enabled? true)
     (sc/hide! (sc/select r [:#random-event-panel]))
     (sc/show! (sc/select r [:#standard-event-panel]))
@@ -647,16 +661,17 @@
     (sc/config! (sc/select r [:#movement-factors]) :enabled? false)
     (sc/config! (sc/select r [:#movement-points]) :enabled? false)
     (sc/config! (sc/select r [:#firepower]) :enabled? false)
-    (activate-final-modifier-during-close-combat-phase e)
+    (sc/config! (sc/select r [:#split-final-modifier-panel]) :visible? (= "Ambush" action-option-text))
+    (sc/config! (sc/select r [:#final-modifier-panel]) :visible? (not= "Ambush" action-option-text))
+    (activate-final-modifiers-during-close-combat-phase e)
     (activate-result-during-close-combat-phase e)
     (activate-event-button-for-remaining-actions-during-close-combat-phase e)))
 
 (defn- perform-close-combat-phase-activations [e]
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
-    (if (= "Random Selection" action-option-text)
-      (perform-activations-for-random-selection e)
-      (perform-close-combat-phase-activations-for-remaining-actions e))))
+    (cond (= "Random Selection" action-option-text) (perform-activations-for-random-selection e)
+          :else (perform-close-combat-phase-activations-for-remaining-actions e))))
 
 (defn- perform-activations [e]
   (let [r (sc/to-root e)
@@ -667,7 +682,9 @@
 (defn- reset-event-panel [e]
   (let [r (sc/to-root e)
         event-panel (sc/select r [:#event-panel])
-        {:keys [action-options description number-dice white-die-panel colored-die-panel movement-factors movement-points firepower final-modifier result]} (sc/group-by-id event-panel)
+        {:keys [action-options description number-dice white-die-panel colored-die-panel
+                movement-factors movement-points firepower
+                final-modifier attacker-final-modifier defender-final-modifier result]} (sc/group-by-id event-panel)
         select-die-panel (fn [v] (sc/select r v))]
     (sc/selection! action-options 0)
     (sc/text! description "")
@@ -678,6 +695,8 @@
     (sc/text! movement-points "")
     (sc/text! firepower "")
     (sc/selection! final-modifier 0)
+    (sc/selection! attacker-final-modifier 0)
+    (sc/selection! defender-final-modifier 0)
     (sc/text! result "")
     (perform-activations e)
     e))
@@ -798,17 +817,19 @@
   (let [r (sc/to-root e)
         sub-phase-text (-> r (sc/select [:#sub-phase]) sc/text)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)
-        description (sc/select r [:#description])
-        description-text (sc/text description)
+        description-text (-> r (sc/select [:#description]) sc/text)
         white-die-panel (-> r (sc/select [:#white-die-panel]))
         colored-die-panel (-> r (sc/select [:#colored-die-panel]))
         random-die-panels (map (fn [pid] (sc/select r [pid])) (map :panel-id-select random-dice-info))
         die-rolls (gather-die-rolls (concat (list white-die-panel colored-die-panel) random-die-panels))
-        final-modifier (sc/select r [:#final-modifier])
-        final-modifier-selection (sc/selection final-modifier)
-        result (sc/select r [:#result])
-        result-text (sc/text result)]
-    (swap! the-game update-in [:game-zip-loc] append-event sub-phase-text action-option-text description-text die-rolls final-modifier-selection result-text)
+        final-modifier-selection (-> r (sc/select [:#final-modifier]) sc/selection)
+        attacker-final-modifier-selection (when (= "Ambush" action-option-text)
+                                            (-> r (sc/select [:#attacker-final-modifier]) sc/selection))
+        defender-final-modifier-selection (when (= "Ambush" action-option-text)
+                                            (-> r (sc/select [:#defender-final-modifier]) sc/selection))
+        result-text (-> r (sc/select [:#result]) sc/text)]
+    (swap! the-game update-in [:game-zip-loc] append-event sub-phase-text action-option-text description-text die-rolls
+           final-modifier-selection attacker-final-modifier-selection defender-final-modifier-selection result-text)
     (reset-event-panel e)))
 
 (defn- perform-file-new [e]
@@ -825,6 +846,7 @@
                  (with-open [w (clojure.java.io/writer f)]
                    (-> the-game
                        deref
+                       :game-zip-loc
                        zip/root
                        (xml/indent w)))))
              (process [_])
@@ -899,6 +921,19 @@
                         (sm/mig-panel :id :game-position-panel :constraints [] :items [[turn-panel] [attacker-panel, "wrap"]
                                                                                        [phase-panel] [sub-phase-panel]])
 
+                        (sc/spinner :id :final-modifier :model (sc/spinner-model 0 :from -10 :to 10 :by 1))
+                        (sm/mig-panel :id :final-modifier-panel :constraints ["insets 0" "[|fill, grow]" ""] :items [["Final Modifier:" "align right"] [final-modifier "span, wrap"]])
+
+                        (sc/spinner :id :attacker-final-modifier :model (sc/spinner-model 0 :from -10 :to 10 :by 1))
+                        (sc/spinner :id :defender-final-modifier :model (sc/spinner-model 0 :from -10 :to 10 :by 1))
+                        (sm/mig-panel :id :split-final-modifier-panel :visible? false :constraints ["insets 0" "[|fill, grow||fill, grow]" ""] :items [["ATTACKER Final Modifier:" "align right"] [attacker-final-modifier] ["DEFENDER Final Modifier:" "align right"] [defender-final-modifier "wrap"]])
+
+                        (sc/label :id :movement-factors-label :text "MF:" :halign :right)
+                        (sc/text :id :movement-factors :text "")
+                        (sc/label :id :movement-points-label :text "MP:" :halign :right)
+                        (sc/text :id :movement-points :text "")
+                        (sc/label :id :firepower-label :text "FP:" :halign :right)
+                        (sc/text :id :firepower :text "")
                         (sm/mig-panel :id :white-die-panel
                                       :constraints ["fill, insets 0"]
                                       :items (:radio-buttons white-die-info)
@@ -907,17 +942,11 @@
                                       :constraints ["fill, insets 0"]
                                       :items (:radio-buttons colored-die-info)
                                       :user-data {:color colored :button-group (:button-group colored-die-info)})
-                        (sc/label :id :movement-factors-label :text "MF:" :halign :right)
-                        (sc/text :id :movement-factors :text "")
-                        (sc/label :id :movement-points-label :text "MP:" :halign :right)
-                        (sc/text :id :movement-points :text "")
-                        (sc/label :id :firepower-label :text "FP:" :halign :right)
-                        (sc/text :id :firepower :text "")
-                        (sc/spinner :id :final-modifier :model (sc/spinner-model 0 :from -10 :to 10 :by 1))
-                        (sm/mig-panel :id :standard-event-panel :constraints ["" "[|fill, grow]" ""] :items [["White Die:" "align right"] [white-die-panel "span, wrap"]
+                        (sm/mig-panel :id :standard-event-panel :constraints ["" "[|fill, grow]" ""] :items [[movement-factors-label "grow"] [movement-factors] [movement-points-label] [movement-points] [firepower-label] [firepower "wrap"]
+                                                                                                             ["White Die:" "align right"] [white-die-panel "span, wrap"]
                                                                                                              ["Colored Die:" "align right"] [colored-die-panel "span, wrap"]
-                                                                                                             [movement-factors-label "grow"] [movement-factors] [movement-points-label] [movement-points] [firepower-label] [firepower "wrap"]
-                                                                                                             ["Final Modifier:" "align right"] [final-modifier "span, wrap"]])
+                                                                                                             [final-modifier-panel "hidemode 3, span, wrap, grow"]
+                                                                                                             [split-final-modifier-panel "hidemode 3, span, wrap, grow"]])
 
                         (sc/spinner :id :number-dice :model (sc/spinner-model 2 :from 2 :to 10 :by 1))
                         (sm/mig-panel :id :random-event-panel :visible? false :constraints ["" "[|fill, grow]" ""] :items (into [["Number dice:" "align right"] [number-dice "span, wrap"]]
