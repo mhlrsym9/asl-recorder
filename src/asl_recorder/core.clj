@@ -363,28 +363,54 @@
                       :else false)]
     (sc/config! add-event-button :enabled? enable?)))
 
-(defn- perform-rally-phase-activations [e]
-  (let [r (sc/to-root e)
-        fields (vec (map #(sc/select r (vector %)) [:#movement-factors :#movement-points :#firepower]))]
-    (sc/config! (-> r (sc/select [:#description])) :enabled? true)
-    (sc/hide! (sc/select r [:#random-event-panel]))
-    (sc/show! (sc/select r [:#standard-event-panel]))
-    (activate-white-die-during-rally-phase e)
-    (activate-colored-die-during-rally-phase e)
-    (sc/config! fields :enabled? false)
-    (sc/hide! (sc/select r [:#split-final-modifier-panel]))
-    (sc/show! (sc/select r [:#final-modifier-panel]))
-    (activate-final-modifier-during-rally-phase e)
-    (sc/config! (sc/select r [:#attacker-final-modifier]) :enabled? false)
-    (sc/config! (sc/select r [:#defender-final-modifier]) :enabled? false)
-    (activate-result-during-rally-phase e)
-    (activate-event-button-during-rally-phase e)))
-
 (defn- update-random-dice [e id visible? rdi]
   (let [r (sc/to-root e)
         select-die-panel (fn [v] (sc/select r v))
         panels (map (comp select-die-panel vector id) rdi)]
     (dorun (map #(sc/config! % :visible? visible?) panels))))
+
+(defn- deactivate-random-event-panel [e]
+  (let [r (sc/to-root e)]
+    (sc/hide! (sc/select r [:#random-event-panel]))
+    (sc/config! (sc/select r [:#number-dice]) :enabled? false)
+    (update-random-dice e :label-id-select false random-dice-info)
+    (update-random-dice e :panel-id-select false random-dice-info)))
+
+(defn- deactivate-standard-event-panel [e]
+  (let [r (sc/to-root e)]
+    (sc/hide! (sc/select r [:#standard-event-panel]))
+    (disable-die-radio-buttons (sc/select r [:#white-die-panel]))
+    (disable-die-radio-buttons (sc/select r [:#colored-die-panel]))
+    (sc/config! (sc/select r [:#movement-factors]) :enabled? false)
+    (sc/config! (sc/select r [:#movement-points]) :enabled? false)
+    (sc/config! (sc/select r [:#firepower]) :enabled? false)))
+
+(defn- deactivate-final-modifier-panel [e]
+  (let [r (sc/to-root e)]
+    (sc/hide! (sc/select r [:#final-modifier-panel]))
+    (sc/config! (sc/select r [:#final-modifier]) :enabled? false)))
+
+(defn- deactivate-split-final-modifier-panel [e]
+  (let [r (sc/to-root e)]
+    (sc/hide! (sc/select r [:#split-final-modifier-panel]))
+    (sc/config! (sc/select r [:#attacker-final-modifier]) :enabled? false)
+    (sc/config! (sc/select r [:#defender-final-modifier]) :enabled? false)))
+
+(defn- perform-rally-phase-activations [e]
+  (let [r (sc/to-root e)]
+    (sc/config! (-> r (sc/select [:#description])) :enabled? true)
+    (deactivate-random-event-panel e)
+    (sc/show! (sc/select r [:#standard-event-panel]))
+    (activate-white-die-during-rally-phase e)
+    (activate-colored-die-during-rally-phase e)
+    (sc/config! (sc/select r [:#movement-factors]) :enabled? false)
+    (sc/config! (sc/select r [:#movement-points]) :enabled? false)
+    (sc/config! (sc/select r [:#firepower]) :enabled? false)
+    (deactivate-split-final-modifier-panel e)
+    (sc/show! (sc/select r [:#final-modifier-panel]))
+    (activate-final-modifier-during-rally-phase e)
+    (activate-result-during-rally-phase e)
+    (activate-event-button-during-rally-phase e)))
 
 (defn- activate-event-button-for-random-selection [e]
   (let [r (sc/to-root e)
@@ -405,7 +431,7 @@
   (let [r (sc/to-root e)
         number-dice-selection (-> r (sc/select [:#number-dice]) sc/selection)]
     (sc/config! (sc/select r [:#description]) :enabled? true)
-    (sc/hide! (sc/select r [:#standard-event-panel]))
+    (deactivate-standard-event-panel e)
     (sc/show! (sc/select r [:#random-event-panel]))
     (sc/config! (sc/select r [:#number-dice]) :enabled? true)
     (->> random-dice-info
@@ -420,6 +446,8 @@
     (->> random-dice-info
          (drop number-dice-selection)
          (update-random-dice e :panel-id-select false))
+    (deactivate-split-final-modifier-panel e)
+    (deactivate-final-modifier-panel e)
     (sc/config! (sc/select r [:#result]) :enabled? true)
     (activate-event-button-for-random-selection e)
     (sc/pack! e)))
@@ -497,18 +525,16 @@
 (defn- perform-fire-phase-activations-for-remaining-actions [e]
   (let [r (sc/to-root e)]
     (sc/config! (sc/select r [:#description]) :enabled? true)
-    (sc/hide! (sc/select r [:#random-event-panel]))
+    (deactivate-random-event-panel e)
     (sc/show! (sc/select r [:#standard-event-panel]))
     (activate-white-die-during-fire-phase e)
     (activate-colored-die-during-fire-phase e)
     (activate-movement-factors-during-fire-phase e)
     (sc/config! (sc/select r [:#movement-points]) :enabled? false)
     (activate-firepower-during-fire-phase e)
-    (sc/hide! (sc/select r [:#split-final-modifier-panel]))
+    (deactivate-split-final-modifier-panel e)
     (sc/show! (sc/select r [:#final-modifier-panel]))
     (activate-final-modifier-during-fire-phase e)
-    (sc/config! (sc/select r [:#attacker-final-modifier]) :enabled? false)
-    (sc/config! (sc/select r [:#defender-final-modifier]) :enabled? false)
     (activate-result-during-fire-phase e)
     (activate-event-button-for-remaining-actions-during-fire-phase e)))
 
@@ -563,18 +589,16 @@
 (defn- perform-rout-phase-activations [e]
   (let [r (sc/to-root e)]
     (sc/config! (-> r (sc/select [:#description])) :enabled? true)
-    (sc/hide! (sc/select r [:#random-event-panel]))
+    (deactivate-random-event-panel e)
     (sc/show! (sc/select r [:#standard-event-panel]))
     (activate-white-die-during-rout-phase e)
     (activate-colored-die-during-rout-phase e)
     (activate-movement-factors-during-rout-phase e)
     (sc/config! (sc/select r [:#movement-points]) :enabled? false)
     (sc/config! (sc/select r [:#firepower]) :enabled? false)
-    (sc/hide! (sc/select r [:#split-final-modifier-panel]))
+    (deactivate-split-final-modifier-panel e)
     (sc/show! (sc/select r [:#final-modifier-panel]))
     (activate-final-modifier-during-rout-phase e)
-    (sc/config! (sc/select r [:#attacker-final-modifier]) :enabled? false)
-    (sc/config! (sc/select r [:#defender-final-modifier]) :enabled? false)
     (activate-result-during-rout-phase e)
     (activate-event-button-during-rout-phase e)))
 
@@ -598,18 +622,16 @@
 (defn- perform-advance-phase-activations [e]
   (let [r (sc/to-root e)]
     (sc/config! (-> r (sc/select [:#description])) :enabled? true)
-    (sc/hide! (sc/select r [:#random-event-panel]))
+    (deactivate-random-event-panel e)
     (sc/show! (sc/select r [:#standard-event-panel]))
     (disable-die-radio-buttons (sc/select r [:#white-die-panel]))
     (disable-die-radio-buttons (sc/select r [:#colored-die-panel]))
     (sc/config! (sc/select r [:#movement-factors]) :enabled? false)
     (sc/config! (sc/select r [:#movement-points]) :enabled? false)
     (sc/config! (sc/select r [:#firepower]) :enabled? false)
-    (sc/hide! (sc/select r [:#split-final-modifier-panel]))
+    (deactivate-split-final-modifier-panel e)
     (sc/show! (sc/select r [:#final-modifier-panel]))
     (sc/config! (sc/select r [:#final-modifier]) :enabled? false)
-    (sc/config! (sc/select r [:#attacker-final-modifier]) :enabled? false)
-    (sc/config! (sc/select r [:#defender-final-modifier]) :enabled? false)
     (activate-result-during-advance-phase e)
     (activate-event-button-during-advance-phase e)))
 
@@ -654,7 +676,7 @@
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
     (sc/config! (sc/select r [:#description]) :enabled? true)
-    (sc/hide! (sc/select r [:#random-event-panel]))
+    (deactivate-random-event-panel e)
     (sc/show! (sc/select r [:#standard-event-panel]))
     (activate-white-die-during-close-combat-phase e)
     (activate-colored-die-during-close-combat-phase e)
@@ -670,8 +692,9 @@
 (defn- perform-close-combat-phase-activations [e]
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
-    (cond (= "Random Selection" action-option-text) (perform-activations-for-random-selection e)
-          :else (perform-close-combat-phase-activations-for-remaining-actions e))))
+    (if (= "Random Selection" action-option-text)
+      (perform-activations-for-random-selection e)
+      (perform-close-combat-phase-activations-for-remaining-actions e))))
 
 (defn- perform-activations [e]
   (let [r (sc/to-root e)
