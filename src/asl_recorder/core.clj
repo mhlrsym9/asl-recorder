@@ -15,7 +15,8 @@
            [javax.swing JFrame SwingWorker SwingWorker$StateValue JOptionPane ButtonGroup])
   (:gen-class))
 
-(declare transition-to-rally-phase-reinforcements
+(declare transition-to-rally-phase
+         transition-to-rally-phase-reinforcements
          transition-to-rally-phase-recovery
          transition-to-rally-phase-repair
          transition-to-rally-phase-transfer
@@ -25,6 +26,7 @@
          transition-to-movement
          transition-to-defensive-fire
          transition-to-advancing-fire
+         transition-to-rout
          transition-to-attacker-rout
          transition-to-defender-rout
          transition-to-advance
@@ -35,29 +37,29 @@
          perform-advance-phase-activations
          perform-close-combat-phase-activations)
 
-(def rally-phase-map {"Reinforcements"      {:next-sub-phase "ATTACKER Recovery" :transition-fn #'transition-to-rally-phase-recovery}
-                      "ATTACKER Recovery"   {:next-sub-phase "DEFENDER Recovery" :transition-fn #'transition-to-rally-phase-recovery}
-                      "DEFENDER Recovery"   {:next-sub-phase "ATTACKER Repair" :transition-fn #'transition-to-rally-phase-repair}
-                      "ATTACKER Repair"     {:next-sub-phase "DEFENDER Repair" :transition-fn #'transition-to-rally-phase-repair}
-                      "DEFENDER Repair"     {:next-sub-phase "ATTACKER Transfer" :transition-fn #'transition-to-rally-phase-transfer}
-                      "ATTACKER Transfer"   {:next-sub-phase "DEFENDER Transfer" :transition-fn #'transition-to-rally-phase-transfer}
-                      "DEFENDER Transfer"   {:next-sub-phase "ATTACKER Self-Rally" :transition-fn #'transition-to-rally-phase-self-rally}
-                      "ATTACKER Self-Rally" {:next-sub-phase "DEFENDER Self-Rally" :transition-fn #'transition-to-rally-phase-self-rally}
-                      "DEFENDER Self-Rally" {:next-sub-phase "ATTACKER Unit Rally" :transition-fn #'transition-to-rally-phase-unit-rally}
-                      "ATTACKER Unit Rally" {:next-sub-phase "DEFENDER Unit Rally" :transition-fn #'transition-to-rally-phase-unit-rally}
-                      "DEFENDER Unit Rally" {:next-sub-phase nil :transition-fn #'transition-to-prep-fire}})
+(def rally-phase-map {"Reinforcements"      {:next-sub-phase "ATTACKER Recovery" :transition-fn #'transition-to-rally-phase-recovery :open-file-fn #'transition-to-rally-phase-reinforcements}
+                      "ATTACKER Recovery"   {:next-sub-phase "DEFENDER Recovery" :transition-fn #'transition-to-rally-phase-recovery :open-file-fn #'transition-to-rally-phase-recovery}
+                      "DEFENDER Recovery"   {:next-sub-phase "ATTACKER Repair" :transition-fn #'transition-to-rally-phase-repair :open-file-fn #'transition-to-rally-phase-recovery}
+                      "ATTACKER Repair"     {:next-sub-phase "DEFENDER Repair" :transition-fn #'transition-to-rally-phase-repair :open-file-fn #'transition-to-rally-phase-repair}
+                      "DEFENDER Repair"     {:next-sub-phase "ATTACKER Transfer" :transition-fn #'transition-to-rally-phase-transfer :open-file-fn #'transition-to-rally-phase-repair}
+                      "ATTACKER Transfer"   {:next-sub-phase "DEFENDER Transfer" :transition-fn #'transition-to-rally-phase-transfer :open-file-fn #'transition-to-rally-phase-transfer}
+                      "DEFENDER Transfer"   {:next-sub-phase "ATTACKER Self-Rally" :transition-fn #'transition-to-rally-phase-self-rally :open-file-fn #'transition-to-rally-phase-transfer}
+                      "ATTACKER Self-Rally" {:next-sub-phase "DEFENDER Self-Rally" :transition-fn #'transition-to-rally-phase-self-rally :open-file-fn #'transition-to-rally-phase-self-rally}
+                      "DEFENDER Self-Rally" {:next-sub-phase "ATTACKER Unit Rally" :transition-fn #'transition-to-rally-phase-unit-rally :open-file-fn #'transition-to-rally-phase-self-rally}
+                      "ATTACKER Unit Rally" {:next-sub-phase "DEFENDER Unit Rally" :transition-fn #'transition-to-rally-phase-unit-rally :open-file-fn #'transition-to-rally-phase-unit-rally}
+                      "DEFENDER Unit Rally" {:next-sub-phase nil :transition-fn #'transition-to-prep-fire :open-file-fn #'transition-to-rally-phase-unit-rally}})
 
-(def phase-map {"Rally"          {:next-phase "Prep Fire" :transition-fn #'transition-to-prep-fire :activation-fn #'perform-rally-phase-activations}
-                "Prep Fire"      {:next-phase "Movement" :transition-fn #'transition-to-movement :activation-fn #'perform-fire-phase-activations}
-                "Movement"       {:next-phase "Defensive Fire" :transition-fn #'transition-to-defensive-fire :activation-fn #'perform-fire-phase-activations}
-                "Defensive Fire" {:next-phase "Advancing Fire" :transition-fn #'transition-to-advancing-fire :activation-fn #'perform-fire-phase-activations}
-                "Advancing Fire" {:next-phase "Rout" :transition-fn #'transition-to-attacker-rout :activation-fn #'perform-fire-phase-activations}
-                "Rout"           {:next-phase "Advance" :transition-fn #'transition-to-advance :activation-fn #'perform-rout-phase-activations}
-                "Advance"        {:next-phase "Close Combat" :transition-fn #'transition-to-close-combat :activation-fn #'perform-advance-phase-activations}
-                "Close Combat"   {:next-phase "Rally" :transition-fn #'transition-to-rally-phase-reinforcements :activation-fn #'perform-close-combat-phase-activations}})
+(def phase-map {"Rally"          {:next-phase "Prep Fire" :transition-fn #'transition-to-prep-fire :activation-fn #'perform-rally-phase-activations :open-file-fn #'transition-to-rally-phase}
+                "Prep Fire"      {:next-phase "Movement" :transition-fn #'transition-to-movement :activation-fn #'perform-fire-phase-activations :open-file-fn #'transition-to-prep-fire}
+                "Movement"       {:next-phase "Defensive Fire" :transition-fn #'transition-to-defensive-fire :activation-fn #'perform-fire-phase-activations :open-file-fn #'transition-to-movement}
+                "Defensive Fire" {:next-phase "Advancing Fire" :transition-fn #'transition-to-advancing-fire :activation-fn #'perform-fire-phase-activations :open-file-fn #'transition-to-defensive-fire}
+                "Advancing Fire" {:next-phase "Rout" :transition-fn #'transition-to-attacker-rout :activation-fn #'perform-fire-phase-activations :open-file-fn #'transition-to-advancing-fire}
+                "Rout"           {:next-phase "Advance" :transition-fn #'transition-to-advance :activation-fn #'perform-rout-phase-activations :open-file-fn #'transition-to-rout}
+                "Advance"        {:next-phase "Close Combat" :transition-fn #'transition-to-close-combat :activation-fn #'perform-advance-phase-activations :open-file-fn #'transition-to-advance}
+                "Close Combat"   {:next-phase "Rally" :transition-fn #'transition-to-rally-phase-reinforcements :activation-fn #'perform-close-combat-phase-activations :open-file-fn #'transition-to-close-combat}})
 
-(def rout-phase-map {"ATTACKER" {:next-sub-phase "DEFENDER" :transition-fn #'transition-to-defender-rout}
-                     "DEFENDER" {:next-sub-phase nil :transition-fn #'transition-to-advance}})
+(def rout-phase-map {"ATTACKER" {:next-sub-phase "DEFENDER" :transition-fn #'transition-to-defender-rout :open-file-fn #'transition-to-attacker-rout}
+                     "DEFENDER" {:next-sub-phase nil :transition-fn #'transition-to-advance :open-file-fn #'transition-to-defender-rout}})
 
 (def attacker-map {"German" "Russian"
                    "Russian" "German"})
@@ -66,17 +68,19 @@
                              (xml/element :turn {:number 1}
                                           (xml/element :side {:attacker "German"}
                                                        (xml/element :phase {:name "Rally"})))))
+(defn- initial-game-zip-loc [the-xml]
+  (-> the-xml
+      zip/xml-zip
+      zip/down
+      zip/rightmost
+      zip/down
+      zip/rightmost
+      zip/down
+      zip/rightmost))
 
-(def the-game (atom {:game-zip-loc (-> game-start
-                                       zip/xml-zip
-                                       zip/down
-                                       zip/rightmost
-                                       zip/down
-                                       zip/rightmost
-                                       zip/down
-                                       zip/rightmost)
+(def the-game (atom {:game-zip-loc (initial-game-zip-loc game-start)
                      :is-modified? false
-                     :file-name    nil}))
+                     :file         nil}))
 
 (def white "white")
 (def colored "colored")
@@ -114,10 +118,14 @@
 
 (defn- process-the-game [e])
 
-(defn- update-time [turn next-turn attacker next-attacker phase next-phase]
-  (sc/text! turn next-turn)
-  (sc/text! attacker next-attacker)
-  (sc/text! phase next-phase))
+(defn- update-time [e the-turn the-attacker the-phase]
+  (let [r (sc/to-root e)
+        turn (sc/select r [:#turn])
+        attacker (sc/select r [:#attacker])
+        phase (sc/select r [:#phase])]
+    (sc/text! turn the-turn)
+    (sc/text! attacker the-attacker)
+    (sc/text! phase the-phase)))
 
 (defn append-event [loc sub-phase the-action-option the-description the-die-rolls the-final-modifier the-attacker-final-modifier the-defender-final-modifier the-result]
   (let [n (zip/node loc)
@@ -162,6 +170,13 @@
 
 (defn get-game-phase [loc]
   (-> loc zip/node :attrs :name))
+
+(defn get-game-sub-phase [loc]
+  (if (zip/down loc)
+    (-> loc zip/down zip/rightmost zip/node :attrs :sub-phase)
+    (if (= "Rally" (get-game-phase loc))
+      "Reinforcements"
+      "ATTACKER Rout")))
 
 (defn get-game-attacker [loc]
   (-> loc zip/up zip/node :attrs :attacker))
@@ -226,11 +241,10 @@
         sub-phase-text (-> r (sc/select [:#sub-phase]) sc/text)
         turn (sc/select r [:#turn])
         attacker (sc/select r [:#attacker])
-        phase (sc/select r [:#phase])
         {:keys [next-phase new-loc] {:keys [transition-fn next-sub-phase]} :next-sub-phase-info}
         (-> the-game deref :game-zip-loc (advance-game-sub-phase sub-phase-text sub-phase-map))]
     (update-the-game new-loc)
-    (update-time turn (sc/text turn) attacker (sc/text attacker) phase next-phase)
+    (update-time e (sc/text turn) (sc/text attacker) next-phase)
     (transition-fn e next-sub-phase)))
 
 (defn- advance-sub-phase [e]
@@ -240,32 +254,26 @@
           (= "Rout" phase-text) (perform-advance-sub-phase e rout-phase-map))))
 
 (defn- advance-phase [e]
-  (let [r (sc/to-root e)
-        turn (sc/select r [:#turn])
-        attacker (sc/select r [:#attacker])
-        phase (sc/select r [:#phase])
-        {:keys [next-turn next-attacker new-loc], {:keys [next-phase transition-fn]} :next-phase-info}
+  (let [{:keys [next-turn next-attacker new-loc], {:keys [next-phase transition-fn]} :next-phase-info}
         (-> the-game deref :game-zip-loc advance-game-phase)]
     (update-the-game new-loc)
-    (update-time turn next-turn attacker next-attacker phase next-phase)
+    (update-time e next-turn next-attacker next-phase)
     (transition-fn e)
     e))
 
 (defn- advance-attacker [e]
-  (let [{:keys [turn attacker phase]} (sc/group-by-id (sc/to-root e))
-        {:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info}
+  (let [{:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info}
         (-> the-game deref :game-zip-loc advance-game-attacker)]
     (update-the-game new-loc)
-    (update-time turn next-turn attacker next-attacker phase next-phase)
+    (update-time e next-turn next-attacker next-phase)
     (transition-fn e)
     e))
 
 (defn- advance-turn [e]
-  (let [{:keys [turn attacker phase]} (sc/group-by-id (sc/to-root e))
-        {:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info}
+  (let [{:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info}
         (-> the-game deref :game-zip-loc advance-game-turn)]
     (update-the-game new-loc)
-    (update-time turn next-turn attacker next-attacker phase next-phase)
+    (update-time e next-turn next-attacker next-phase)
     (transition-fn e)
     e))
 
@@ -750,6 +758,11 @@
     (sc/config! action-options :enabled? true)
     e))
 
+(defn- transition-to-rally-phase [e]
+  (let [sub-phase (get-game-sub-phase (:game-zip-loc @the-game))
+        open-file-fn (:open-file-fn (get rally-phase-map sub-phase))]
+    (open-file-fn e sub-phase)))
+
 (defn- transition-to-rally-phase-reinforcements [e & rest]
   (-> e
       switch-sub-phase-panel-visibility
@@ -811,6 +824,11 @@
       (establish-action-options ["Advancing Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Random Selection" "Other"])
       reset-event-panel))
 
+(defn- transition-to-rout [e]
+  (let [sub-phase (get-game-sub-phase (:game-zip-loc @the-game))
+        open-file-fn (:open-file-fn (get rout-phase-map sub-phase))]
+    (open-file-fn e sub-phase)))
+
 (defn- transition-to-attacker-rout [e & rest]
   (-> e
       switch-sub-phase-panel-visibility
@@ -859,7 +877,44 @@
   (let [r (sc/to-root e)])
   e)
 
-(defn- perform-file-open [e])
+(defn- perform-file-open [e f]
+  (let [r (sc/to-root e)
+        sw (proxy [asl_recorder.swing_worker] []
+             (doInBackground []
+               (do
+                 (with-open [r (clojure.java.io/reader f)]
+                   (let [loc (-> r
+                                 xml/parse
+                                 initial-game-zip-loc)]
+                     (swap! the-game assoc :is-modified? false :file f :game-zip-loc loc)
+                     (proxy-super publishFromClojure (into-array String ["Danger, Will Robinson!"]))))))
+             (process [_]
+               (let [[_ _ phase :as game-time] ((juxt get-game-turn get-game-attacker get-game-phase) (:game-zip-loc @the-game))
+                     {:keys [open-file-fn]} (get phase-map phase)]
+                 (apply update-time e game-time)
+                 (switch-sub-phase-panel-visibility e)
+                 (open-file-fn e)))
+             (done []
+               (try
+                 (do
+                   (proxy-super get))
+                 (catch ExecutionException e
+                   (throw e))
+                 (finally
+                   (.setCursor r Cursor/DEFAULT_CURSOR)))))
+        pcl (proxy [PropertyChangeListener] []
+              (propertyChange [e]
+                (when (= (.getPropertyName e) "state")
+                  (let [v (.getNewValue e)]
+                    (cond
+                      (= v SwingWorker$StateValue/STARTED) (.setCursor r Cursor/WAIT_CURSOR)
+                      (= v SwingWorker$StateValue/DONE) (.setCursor r Cursor/DEFAULT_CURSOR))))))]
+    (doto sw
+      (.addPropertyChangeListener pcl)
+      (.execute))))
+
+(defn- choose-file-open [e]
+  (sch/choose-file (sc/to-root e) :type :open :selection-mode :files-only :filters [["ASL files" ["asl"]]] :all-files? false :success-fn (fn [_ f] (perform-file-open e f))))
 
 (defn- perform-file-save [e f]
   (let [r (sc/to-root e)
@@ -892,8 +947,13 @@
       (.addPropertyChangeListener pcl)
       (.execute))))
 
-(defn- choose-file [e]
-  (sch/choose-file (sc/to-root e) :filters [["ASL files" ["asl"]]] :all-files? false :success-fn (fn [_ f] (perform-file-save e f))))
+(defn- choose-file-save [e]
+  (sch/choose-file (sc/to-root e) :type :save :selection-mode :files-only :filters [["ASL files" ["asl"]]] :all-files? false :success-fn (fn [_ f] (perform-file-save e f))))
+
+(defn- do-file-save [e]
+  (if-let [f (:file @the-game)]
+    (perform-file-save e f)
+    (choose-file-save e)))
 
 (defn- perform-file-exit [e])
 
@@ -990,8 +1050,9 @@
 
                         (sc/button :id :ok :text "OK" :enabled? false)
                         (sc/menu-item :id :file-new :listen [:action perform-file-new] :text "New..." :mnemonic \N)
-                        (sc/menu-item :id :file-open :listen [:action perform-file-open] :text "Open..." :mnemonic \O)
-                        (sc/menu-item :id :file-save :listen [:action choose-file] :text "Save..." :mnemonic \S)
+                        (sc/menu-item :id :file-open :listen [:action choose-file-open] :text "Open..." :mnemonic \O)
+                        (sc/menu-item :id :file-save :listen [:action do-file-save] :text "Save..." :mnemonic \S)
+                        (sc/menu-item :id :file-save-as :listen [:action choose-file-save] :text "Save As..." :mnemonic \A)
                         (sc/menu-item :id :file-exit :listen [:action perform-file-exit] :text "Exit" :mnemonic \E)]
                        (let [ok-fn (fn [e] (process-the-game e))]
                          (sc/listen advance-turn-button :action advance-turn)
@@ -1018,7 +1079,7 @@
                                        :content (sm/mig-panel :constraints [] :items [[game-position-panel "wrap"]
                                                                                       [event-panel "growx, wrap"]
                                                                                       [ok "align center"]]),
-                                       :menubar (sc/menubar :items [(sc/menu :text "File" :items [file-new file-open file-save file-exit])])
+                                       :menubar (sc/menubar :items [(sc/menu :text "File" :items [file-new file-open file-save file-save-as file-exit])])
                                        :on-close :exit)
                              (transition-to-rally-phase-reinforcements "Reinforcements")
                              sc/pack!
