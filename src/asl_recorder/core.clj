@@ -64,11 +64,15 @@
 (def attacker-map {"German" "Russian"
                    "Russian" "German"})
 
-(def game-start (xml/element :game {:name "War of the Rats" :number-full-turns "6" :additional-half-turn false :side1 "German" :side2 "Russian"}
-                             (xml/element :turn {:number 1}
-                                          (xml/element :side {:attacker "German"}
-                                                       (xml/element :phase {:name "Rally"})))))
-(defn- initial-game-zip-loc [the-xml]
+(defn create-game-start-xml [name side1 side2 number-turns additional-half-turn]
+  (xml/element :game {:name name :number-full-turns number-turns :additional-half-turn additional-half-turn :side1 side1 :side2 side2}
+               (xml/element :turn {:number 1}
+                            (xml/element :side {:attacker side1}
+                                         (xml/element :phase {:name "Rally"})))))
+
+(def game-start (create-game-start-xml "War of the Rats" "German" "Russian" 6 true))
+
+(defn initial-game-zip-loc [the-xml]
   (-> the-xml
       zip/xml-zip
       zip/down
@@ -168,25 +172,54 @@
                                                        (xml/element :phase {:name "Rally"}))))]
     (-> l (zip/replace (assoc n :content c)) zip/down zip/rightmost zip/down zip/rightmost zip/down zip/rightmost)))
 
-(defn get-game-phase [loc]
+(defn get-current-game-phase [loc]
   (-> loc zip/node :attrs :name))
 
-(defn get-game-sub-phase [loc]
+(defn get-current-game-sub-phase [loc]
   (if (zip/down loc)
     (-> loc zip/down zip/rightmost zip/node :attrs :sub-phase)
-    (if (= "Rally" (get-game-phase loc))
+    (if (= "Rally" (get-current-game-phase loc))
       "Reinforcements"
       "ATTACKER Rout")))
 
-(defn get-game-attacker [loc]
+(defn get-current-game-attacker [loc]
   (-> loc zip/up zip/node :attrs :attacker))
 
-(defn get-game-turn [loc]
+(defn get-current-game-turn [loc]
   (-> loc zip/up zip/up zip/node :attrs :number))
+
+(defn- get-game-attributes [loc]
+  (-> loc
+      zip/up
+      zip/up
+      zip/up
+      zip/node
+      :attrs))
+
+(defn get-side1-from-loc [loc]
+  (:side1 (get-game-attributes loc)))
+
+(defn get-current-game-zip-loc []
+  (-> the-game deref :game-zip-loc))
+
+(defn- get-side1 []
+  (get-side1-from-loc (get-current-game-zip-loc)))
+
+(defn get-side2-from-loc [loc]
+  (:side2 (get-game-attributes loc)))
+
+(defn- get-side2 []
+  (get-side2-from-loc (get-current-game-zip-loc)))
+
+(defn get-number-turns-from-loc [loc]
+  (:number-full-turns (get-game-attributes loc)))
+
+(defn- get-number-turns []
+  (get-number-turns-from-loc (get-current-game-zip-loc)))
 
 (defn advance-game-sub-phase [loc current-sub-phase sub-phase-map]
   (let [{:keys [next-sub-phase] :as next-sub-phase-info} (get sub-phase-map current-sub-phase)
-        current-phase (get-game-phase loc)
+        current-phase (get-current-game-phase loc)
         next-phase? (nil? next-sub-phase)
         next-phase (if next-phase?
                      (:next-phase (get phase-map current-phase))
@@ -196,14 +229,14 @@
     {:next-phase next-phase :next-sub-phase-info next-sub-phase-info :new-loc new-loc}))
 
 (defn advance-game-phase [loc]
-  (let [current-phase (get-game-phase loc)
+  (let [current-phase (get-current-game-phase loc)
         {:keys [next-phase] :as next-phase-info} (get phase-map current-phase)
-        current-attacker (get-game-attacker loc)
+        current-attacker (get-current-game-attacker loc)
         next-attacker? (= next-phase "Rally")
         next-attacker (if next-attacker?
                         (get attacker-map current-attacker)
                         current-attacker)
-        current-turn (get-game-turn loc)
+        current-turn (get-current-game-turn loc)
         next-turn? (and next-attacker? (= next-attacker "German"))
         next-turn (if next-turn?
                     (inc current-turn)
@@ -214,21 +247,21 @@
     {:next-turn next-turn :next-attacker next-attacker :next-phase-info next-phase-info :new-loc new-loc}))
 
 (defn advance-game-attacker [loc]
-  (let [current-attacker (get-game-attacker loc)
-        current-phase (get-game-phase loc)
+  (let [current-attacker (get-current-game-attacker loc)
+        current-phase (get-current-game-phase loc)
         transition-fn (->> current-phase (get phase-map) :transition-fn)]
     (loop [{next-attacker :next-attacker, new-loc :new-loc, {next-phase :next-phase} :next-phase-info, :as r}
-           {:next-turn (get-game-turn loc) :next-attacker current-attacker :next-phase-info {:next-phase current-phase :transition-fn transition-fn} :new-loc loc}]
+           {:next-turn (get-current-game-turn loc) :next-attacker current-attacker :next-phase-info {:next-phase current-phase :transition-fn transition-fn} :new-loc loc}]
       (if (and (= "Rally" next-phase) (not= current-attacker next-attacker))
         r
         (recur (advance-game-phase new-loc))))))
 
 (defn advance-game-turn [loc]
-  (let [current-turn (get-game-turn loc)
-        current-phase (get-game-phase loc)
+  (let [current-turn (get-current-game-turn loc)
+        current-phase (get-current-game-phase loc)
         transition-fn (->> current-phase (get phase-map) :transition-fn)]
     (loop [{:keys [next-turn next-attacker new-loc] :as r}
-           {:next-turn current-turn :next-attacker (get-game-attacker loc) :next-phase-info {:next-phase current-phase :transition-fn transition-fn} :new-loc loc}]
+           {:next-turn current-turn :next-attacker (get-current-game-attacker loc) :next-phase-info {:next-phase current-phase :transition-fn transition-fn} :new-loc loc}]
       (if (and (= "German" next-attacker) (not= current-turn next-turn))
         r
         (recur (advance-game-phase new-loc))))))
@@ -241,8 +274,9 @@
         sub-phase-text (-> r (sc/select [:#sub-phase]) sc/text)
         turn (sc/select r [:#turn])
         attacker (sc/select r [:#attacker])
+        loc (get-current-game-zip-loc)
         {:keys [next-phase new-loc] {:keys [transition-fn next-sub-phase]} :next-sub-phase-info}
-        (-> the-game deref :game-zip-loc (advance-game-sub-phase sub-phase-text sub-phase-map))]
+        (advance-game-sub-phase loc sub-phase-text sub-phase-map)]
     (update-the-game new-loc)
     (update-time e (sc/text turn) (sc/text attacker) next-phase)
     (transition-fn e next-sub-phase)))
@@ -254,24 +288,27 @@
           (= "Rout" phase-text) (perform-advance-sub-phase e rout-phase-map))))
 
 (defn- advance-phase [e]
-  (let [{:keys [next-turn next-attacker new-loc], {:keys [next-phase transition-fn]} :next-phase-info}
-        (-> the-game deref :game-zip-loc advance-game-phase)]
+  (let [loc (get-current-game-zip-loc)
+        {:keys [next-turn next-attacker new-loc], {:keys [next-phase transition-fn]} :next-phase-info}
+        (advance-game-phase loc)]
     (update-the-game new-loc)
     (update-time e next-turn next-attacker next-phase)
     (transition-fn e)
     e))
 
 (defn- advance-attacker [e]
-  (let [{:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info}
-        (-> the-game deref :game-zip-loc advance-game-attacker)]
+  (let [loc (get-current-game-zip-loc)
+        {:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info}
+        (advance-game-attacker loc)]
     (update-the-game new-loc)
     (update-time e next-turn next-attacker next-phase)
     (transition-fn e)
     e))
 
 (defn- advance-turn [e]
-  (let [{:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info}
-        (-> the-game deref :game-zip-loc advance-game-turn)]
+  (let [loc (get-current-game-zip-loc)
+        {:keys [next-turn next-attacker new-loc] {:keys [next-phase transition-fn]} :next-phase-info}
+        (advance-game-turn loc)]
     (update-the-game new-loc)
     (update-time e next-turn next-attacker next-phase)
     (transition-fn e)
@@ -759,7 +796,7 @@
     e))
 
 (defn- transition-to-rally-phase [e]
-  (let [sub-phase (get-game-sub-phase (:game-zip-loc @the-game))
+  (let [sub-phase (get-current-game-sub-phase (:game-zip-loc @the-game))
         open-file-fn (:open-file-fn (get rally-phase-map sub-phase))]
     (open-file-fn e sub-phase)))
 
@@ -825,7 +862,7 @@
       reset-event-panel))
 
 (defn- transition-to-rout [e]
-  (let [sub-phase (get-game-sub-phase (:game-zip-loc @the-game))
+  (let [sub-phase (get-current-game-sub-phase (:game-zip-loc @the-game))
         open-file-fn (:open-file-fn (get rout-phase-map sub-phase))]
     (open-file-fn e sub-phase)))
 
@@ -869,13 +906,66 @@
         defender-final-modifier-selection (when (= "Ambush" action-option-text)
                                             (-> r (sc/select [:#defender-final-modifier]) sc/selection))
         result-text (-> r (sc/select [:#result]) sc/text)]
-    (swap! the-game update-in [:game-zip-loc] append-event sub-phase-text action-option-text description-text die-rolls
+    (swap! the-game assoc :game-zip-loc append-event sub-phase-text action-option-text description-text die-rolls
            final-modifier-selection attacker-final-modifier-selection defender-final-modifier-selection result-text)
     (reset-event-panel e)))
 
-(defn- perform-file-new [e]
-  (let [r (sc/to-root e)])
-  e)
+(defn- create-new-game [d]
+  (let [r (sc/to-root d)
+        name (sc/text (sc/select r [:#name]))
+        fm (sc/text (sc/select r [:#first-move]))
+        sm (sc/text (sc/select r [:#second-move]))
+        nt (sc/text (sc/select r [:#number-turns]))
+        em? (sc/selection (sc/select r [:#extra-move?]))]
+    (swap! the-game assoc :game-zip-loc (initial-game-zip-loc (create-game-start-xml name fm sm nt em?))
+           :is-modified? false
+           :file nil)))
+
+(defn- reset-ui-after-new-game-loaded [e]
+  (let [[_ _ phase :as game-time] ((juxt get-current-game-turn get-current-game-attacker get-current-game-phase) (:game-zip-loc @the-game))
+        {:keys [open-file-fn]} (get phase-map phase)]
+    (apply update-time e game-time)
+    (switch-sub-phase-panel-visibility e)
+    (open-file-fn e)))
+
+(defn- perform-file-new [e d]
+  (let [r (sc/to-root e)
+        sw (proxy [asl_recorder.swing_worker] []
+             (doInBackground []
+               (do
+                 (create-new-game d)
+                 (proxy-super publishFromClojure (into-array String ["Danger, Will Robinson!"]))))
+             (process [_]
+               (reset-ui-after-new-game-loaded e))
+             (done []
+               (try
+                 (do
+                   (proxy-super get))
+                 (catch ExecutionException e
+                   (throw e))
+                 (finally
+                   (.setCursor r Cursor/DEFAULT_CURSOR)))))
+        pcl (proxy [PropertyChangeListener] []
+              (propertyChange [e]
+                (when (= (.getPropertyName e) "state")
+                  (let [v (.getNewValue e)]
+                    (cond
+                      (= v SwingWorker$StateValue/STARTED) (.setCursor r Cursor/WAIT_CURSOR)
+                      (= v SwingWorker$StateValue/DONE) (.setCursor r Cursor/DEFAULT_CURSOR))))))]
+    (doto sw
+      (.addPropertyChangeListener pcl)
+      (.execute))))
+
+(defn- do-file-new [e]
+  (-> (sc/dialog :content (sc/vertical-panel :items [(sc/horizontal-panel :items ["Name: " (sc/text :id :name)])
+                                                     (sc/horizontal-panel :items ["First Move: " (sc/combobox :id :first-move :model ["German" "Russian" "American"])])
+                                                     (sc/horizontal-panel :items ["Other Side: " (sc/combobox :id :second-move :model ["German" "Russian" "American"])])
+                                                     (sc/horizontal-panel :items ["Number Turns: " (sc/text :id :number-turns)])
+                                                     (sc/horizontal-panel :items [(sc/checkbox :id :extra-move? :text "First Side has extra move?")])])
+                 :option-type :ok-cancel
+                 :success-fn (fn [d] (perform-file-new e d)))
+      sc/pack!
+      sc/show!))
 
 (defn- perform-file-open [e f]
   (let [r (sc/to-root e)
@@ -889,11 +979,7 @@
                      (swap! the-game assoc :is-modified? false :file f :game-zip-loc loc)
                      (proxy-super publishFromClojure (into-array String ["Danger, Will Robinson!"]))))))
              (process [_]
-               (let [[_ _ phase :as game-time] ((juxt get-game-turn get-game-attacker get-game-phase) (:game-zip-loc @the-game))
-                     {:keys [open-file-fn]} (get phase-map phase)]
-                 (apply update-time e game-time)
-                 (switch-sub-phase-panel-visibility e)
-                 (open-file-fn e)))
+               (reset-ui-after-new-game-loaded e))
              (done []
                (try
                  (do
@@ -916,7 +1002,7 @@
 (defn- choose-file-open [e]
   (sch/choose-file (sc/to-root e) :type :open :selection-mode :files-only :filters [["ASL files" ["asl"]]] :all-files? false :success-fn (fn [_ f] (perform-file-open e f))))
 
-(defn- perform-file-save [e f]
+(defn- perform-file-save [e f next-fn]
   (let [r (sc/to-root e)
         sw (proxy [asl_recorder.swing_worker] []
              (doInBackground []
@@ -931,7 +1017,8 @@
              (done []
                (try
                  (do
-                   (proxy-super get))
+                   (proxy-super get)
+                   (when next-fn (next-fn e)))
                  (catch ExecutionException e
                    (throw e))
                  (finally
@@ -947,13 +1034,25 @@
       (.addPropertyChangeListener pcl)
       (.execute))))
 
-(defn- choose-file-save [e]
-  (sch/choose-file (sc/to-root e) :type :save :selection-mode :files-only :filters [["ASL files" ["asl"]]] :all-files? false :success-fn (fn [_ f] (perform-file-save e f))))
+(defn- choose-file-save [e next-fn]
+  (sch/choose-file (sc/to-root e) :type :save :selection-mode :files-only :filters [["ASL files" ["asl"]]] :all-files? false :success-fn (fn [_ f] (perform-file-save e f next-fn))))
 
-(defn- do-file-save [e]
+(defn- do-file-save [e next-fn]
   (if-let [f (:file @the-game)]
-    (perform-file-save e f)
-    (choose-file-save e)))
+    (perform-file-save e f next-fn)
+    (choose-file-save e next-fn)))
+
+(defn- save-game-if-necessary [e next-fn]
+  (let [is-modified? (-> the-game deref :is-modified?)]
+    (if is-modified?
+      (-> (sc/dialog :content "Do you wish to save the current game first?"
+                     :type :question
+                     :option-type :yes-no-cancel
+                     :success-fn (fn [_] (do-file-save e next-fn))
+                     :no-fn (fn [_] (next-fn e)))
+          sc/pack!
+          sc/show!)
+      (next-fn e))))
 
 (defn- perform-file-exit [e])
 
@@ -1049,10 +1148,10 @@
                                                                                                     [add-event-button "span, align center"]])
 
                         (sc/button :id :ok :text "OK" :enabled? false)
-                        (sc/menu-item :id :file-new :listen [:action perform-file-new] :text "New..." :mnemonic \N)
-                        (sc/menu-item :id :file-open :listen [:action choose-file-open] :text "Open..." :mnemonic \O)
-                        (sc/menu-item :id :file-save :listen [:action do-file-save] :text "Save..." :mnemonic \S)
-                        (sc/menu-item :id :file-save-as :listen [:action choose-file-save] :text "Save As..." :mnemonic \A)
+                        (sc/menu-item :id :file-new :listen [:action (fn [e] (save-game-if-necessary e do-file-new))] :text "New..." :mnemonic \N)
+                        (sc/menu-item :id :file-open :listen [:action (fn [e] (save-game-if-necessary e choose-file-open))] :text "Open..." :mnemonic \O)
+                        (sc/menu-item :id :file-save :listen [:action (fn [e] (do-file-save e nil))] :text "Save..." :mnemonic \S)
+                        (sc/menu-item :id :file-save-as :listen [:action (fn [e] (choose-file-save e nil))] :text "Save As..." :mnemonic \A)
                         (sc/menu-item :id :file-exit :listen [:action perform-file-exit] :text "Exit" :mnemonic \E)]
                        (let [ok-fn (fn [e] (process-the-game e))]
                          (sc/listen advance-turn-button :action advance-turn)
