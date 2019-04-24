@@ -79,6 +79,14 @@
       (is (= nil (extract-fn (nth advance-results 11))))
       (is (= "Prep Fire" (get-current-game-phase (:new-loc (last advance-results))))))))
 
+(deftest test-advance-game-rally-phase-with-american-attacker
+  (testing "Try manipulating the rally phase map and then seeing that that carries through advance."
+    (let [the-xml (create-game-start-xml "War of the Rats 2" "American" "German" 6 true)
+          loc (initial-game-zip-loc the-xml)
+          updated-rally-phase-map (get-sub-phase-map loc rally-phase-map)
+          r (advance-game-sub-phase loc "Reinforcements" updated-rally-phase-map)]
+      (is (= "American Recovery" (get-in r [:next-sub-phase-info :next-sub-phase]))))))
+
 (deftest test-advance-game-phase
   (testing "Try out advance-game-phase"
     (let [loc (get-current-game-zip-loc)

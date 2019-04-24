@@ -58,11 +58,8 @@
                 "Advance"        {:next-phase "Close Combat" :transition-fn #'transition-to-close-combat :activation-fn #'perform-advance-phase-activations :open-file-fn #'transition-to-advance}
                 "Close Combat"   {:next-phase "Rally" :transition-fn #'transition-to-rally-phase-reinforcements :activation-fn #'perform-close-combat-phase-activations :open-file-fn #'transition-to-close-combat}})
 
-(def rout-phase-map {"ATTACKER" {:next-sub-phase "DEFENDER" :transition-fn #'transition-to-defender-rout :open-file-fn #'transition-to-attacker-rout}
-                     "DEFENDER" {:next-sub-phase nil :transition-fn #'transition-to-advance :open-file-fn #'transition-to-defender-rout}})
-
-(def attacker-map {"German" "Russian"
-                   "Russian" "German"})
+(def rout-phase-map {"ATTACKER Rout" {:next-sub-phase "DEFENDER Rout" :transition-fn #'transition-to-defender-rout :open-file-fn #'transition-to-attacker-rout}
+                     "DEFENDER Rout" {:next-sub-phase nil :transition-fn #'transition-to-advance :open-file-fn #'transition-to-defender-rout}})
 
 (defn create-game-start-xml [name side1 side2 number-turns additional-half-turn]
   (xml/element :game {:name name :number-full-turns number-turns :additional-half-turn additional-half-turn :side1 side1 :side2 side2}
@@ -102,6 +99,46 @@
 
 (defn- create-random-dice-panel-id-select [color]
   (keyword (str "#" color random-die-panel)))
+
+(defn- get-game-attributes [loc]
+  (-> loc
+      zip/up
+      zip/up
+      zip/up
+      zip/node
+      :attrs))
+
+(defn get-side1-from-loc [loc]
+  (:side1 (get-game-attributes loc)))
+
+(defn get-current-game-zip-loc []
+  (-> the-game deref :game-zip-loc))
+
+(defn- get-side1 []
+  (let [loc (get-current-game-zip-loc)]
+    (get-side1-from-loc loc)))
+
+(defn get-side2-from-loc [loc]
+  (:side2 (get-game-attributes loc)))
+
+(defn- get-side2 []
+  (let [loc (get-current-game-zip-loc)]
+    (get-side2-from-loc loc)))
+
+(defn get-number-turns-from-loc [loc]
+  (:number-full-turns (get-game-attributes loc)))
+
+(defn- get-number-turns []
+  (let [loc (get-current-game-zip-loc)]
+    (get-number-turns-from-loc loc)))
+
+(defn get-sub-phase-map [loc sub-phase-map]
+  (let [side1 (get-side1-from-loc loc)
+        side2 (get-side2-from-loc loc)
+        attacker-fn (fn [s] (when s (str/replace s "ATTACKER" side1)))
+        defender-fn (fn [s] (when s (str/replace s "DEFENDER" side2)))
+        transform-fn (comp attacker-fn defender-fn)]
+    (into {} (for [[k v] sub-phase-map] [(transform-fn k) (assoc v :next-sub-phase (transform-fn (:next-sub-phase v)))]))))
 
 (def random-dice-info (apply conj [{:color           white
                                     :label-id        (create-random-dice-label-id white)
@@ -165,10 +202,11 @@
     (-> l (zip/replace (assoc n :content c)) zip/down zip/rightmost zip/down zip/rightmost)))
 
 (defn append-turn [loc the-turn]
-  (let [l (-> loc zip/up zip/up zip/up)
+  (let [side1 (get-side1)
+        l (-> loc zip/up zip/up zip/up)
         n (zip/node l)
         c (conj (vec (:content n)) (xml/element :turn {:number the-turn}
-                                          (xml/element :side {:attacker "German"}
+                                          (xml/element :side {:attacker side1}
                                                        (xml/element :phase {:name "Rally"}))))]
     (-> l (zip/replace (assoc n :content c)) zip/down zip/rightmost zip/down zip/rightmost zip/down zip/rightmost)))
 
@@ -188,35 +226,6 @@
 (defn get-current-game-turn [loc]
   (-> loc zip/up zip/up zip/node :attrs :number))
 
-(defn- get-game-attributes [loc]
-  (-> loc
-      zip/up
-      zip/up
-      zip/up
-      zip/node
-      :attrs))
-
-(defn get-side1-from-loc [loc]
-  (:side1 (get-game-attributes loc)))
-
-(defn get-current-game-zip-loc []
-  (-> the-game deref :game-zip-loc))
-
-(defn- get-side1 []
-  (get-side1-from-loc (get-current-game-zip-loc)))
-
-(defn get-side2-from-loc [loc]
-  (:side2 (get-game-attributes loc)))
-
-(defn- get-side2 []
-  (get-side2-from-loc (get-current-game-zip-loc)))
-
-(defn get-number-turns-from-loc [loc]
-  (:number-full-turns (get-game-attributes loc)))
-
-(defn- get-number-turns []
-  (get-number-turns-from-loc (get-current-game-zip-loc)))
-
 (defn advance-game-sub-phase [loc current-sub-phase sub-phase-map]
   (let [{:keys [next-sub-phase] :as next-sub-phase-info} (get sub-phase-map current-sub-phase)
         current-phase (get-current-game-phase loc)
@@ -233,11 +242,14 @@
         {:keys [next-phase] :as next-phase-info} (get phase-map current-phase)
         current-attacker (get-current-game-attacker loc)
         next-attacker? (= next-phase "Rally")
+        side1 (get-side1)
+        side2 (get-side2)
         next-attacker (if next-attacker?
-                        (get attacker-map current-attacker)
+                        (get {side1 side2 side2 side1} current-attacker)
                         current-attacker)
         current-turn (get-current-game-turn loc)
-        next-turn? (and next-attacker? (= next-attacker "German"))
+        side1 (get-side1)
+        next-turn? (and next-attacker? (= next-attacker side1))
         next-turn (if next-turn?
                     (inc current-turn)
                     current-turn)
@@ -259,10 +271,11 @@
 (defn advance-game-turn [loc]
   (let [current-turn (get-current-game-turn loc)
         current-phase (get-current-game-phase loc)
-        transition-fn (->> current-phase (get phase-map) :transition-fn)]
+        transition-fn (->> current-phase (get phase-map) :transition-fn)
+        side1 (get-side1)]
     (loop [{:keys [next-turn next-attacker new-loc] :as r}
            {:next-turn current-turn :next-attacker (get-current-game-attacker loc) :next-phase-info {:next-phase current-phase :transition-fn transition-fn} :new-loc loc}]
-      (if (and (= "German" next-attacker) (not= current-turn next-turn))
+      (if (and (= side1 next-attacker) (not= current-turn next-turn))
         r
         (recur (advance-game-phase new-loc))))))
 
@@ -275,8 +288,9 @@
         turn (sc/select r [:#turn])
         attacker (sc/select r [:#attacker])
         loc (get-current-game-zip-loc)
+        game-sub-phase-map (get-sub-phase-map loc sub-phase-map)
         {:keys [next-phase new-loc] {:keys [transition-fn next-sub-phase]} :next-sub-phase-info}
-        (advance-game-sub-phase loc sub-phase-text sub-phase-map)]
+        (advance-game-sub-phase loc sub-phase-text game-sub-phase-map)]
     (update-the-game new-loc)
     (update-time e (sc/text turn) (sc/text attacker) next-phase)
     (transition-fn e next-sub-phase)))
@@ -796,8 +810,10 @@
     e))
 
 (defn- transition-to-rally-phase [e]
-  (let [sub-phase (get-current-game-sub-phase (:game-zip-loc @the-game))
-        open-file-fn (:open-file-fn (get rally-phase-map sub-phase))]
+  (let [loc (get-current-game-zip-loc)
+        sub-phase (get-current-game-sub-phase loc)
+        game-rally-phase-map (get-sub-phase-map loc rally-phase-map)
+        open-file-fn (:open-file-fn (get game-rally-phase-map sub-phase))]
     (open-file-fn e sub-phase)))
 
 (defn- transition-to-rally-phase-reinforcements [e & rest]
@@ -862,14 +878,16 @@
       reset-event-panel))
 
 (defn- transition-to-rout [e]
-  (let [sub-phase (get-current-game-sub-phase (:game-zip-loc @the-game))
-        open-file-fn (:open-file-fn (get rout-phase-map sub-phase))]
+  (let [loc (get-current-game-zip-loc)
+        sub-phase (get-current-game-sub-phase loc)
+        game-rout-phase-map (get-sub-phase-map loc rout-phase-map)
+        open-file-fn (:open-file-fn (get game-rout-phase-map sub-phase))]
     (open-file-fn e sub-phase)))
 
 (defn- transition-to-attacker-rout [e & rest]
   (-> e
       switch-sub-phase-panel-visibility
-      (update-sub-phase-panel "ATTACKER" true false)
+      (update-sub-phase-panel "ATTACKER Rout" true false)
       (establish-action-options ["Rout" "Low Crawl" "Interdiction" "Elimination" "Other"])
       reset-event-panel))
 
@@ -1070,7 +1088,8 @@
                                                   :constraints ["fill, insets 0"]
                                                   :items radio-buttons
                                                   :user-data {:color color :button-group button-group}))
-                                  random-dice-colors)]
+                                  random-dice-colors)
+          side1 (get-side1)]
       (sc/with-widgets [(sc/label :id :turn :text "1")
                         (sm/mig-panel :id :turn-line :constraints ["" "nogrid" ""] :items [["Turn:"] [turn "grow"]])
                         (sc/button :id :advance-turn-button :text "Next Turn")
@@ -1078,7 +1097,7 @@
                         (sm/mig-panel :id :turn-panel :constraints [] :items [[turn-line "span 2, align center, wrap"]
                                                                               [advance-turn-button] [rewind-turn-button]])
 
-                        (sc/label :id :attacker :text "German")
+                        (sc/label :id :attacker :text side1)
                         (sm/mig-panel :id :attacker-line :constraints ["" "nogrid" ""] :items [["Attacker:"] [attacker "grow"]])
                         (sc/button :id :advance-attacker-button :text "Next Attacker")
                         (sc/button :id :rewind-attacker-button :text "Previous Attacker")
