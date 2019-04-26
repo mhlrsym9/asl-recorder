@@ -1072,7 +1072,11 @@
           sc/show!)
       (next-fn e))))
 
-(defn- perform-file-exit [e])
+(defn- do-file-exit [e]
+  (let [r (sc/to-root e)
+        the-frame (sc/select r [:#the-frame])]
+    (sc/dispose! the-frame)
+    (System/exit 0)))
 
 (defn -main
   [& args]
@@ -1167,11 +1171,20 @@
                                                                                                     [add-event-button "span, align center"]])
 
                         (sc/button :id :ok :text "OK" :enabled? false)
+
                         (sc/menu-item :id :file-new :listen [:action (fn [e] (save-game-if-necessary e do-file-new))] :text "New..." :mnemonic \N)
                         (sc/menu-item :id :file-open :listen [:action (fn [e] (save-game-if-necessary e choose-file-open))] :text "Open..." :mnemonic \O)
                         (sc/menu-item :id :file-save :listen [:action (fn [e] (do-file-save e nil))] :text "Save..." :mnemonic \S)
                         (sc/menu-item :id :file-save-as :listen [:action (fn [e] (choose-file-save e nil))] :text "Save As..." :mnemonic \A)
-                        (sc/menu-item :id :file-exit :listen [:action perform-file-exit] :text "Exit" :mnemonic \E)]
+                        (sc/menu-item :id :file-exit :listen [:action (fn [e] (save-game-if-necessary e do-file-exit))] :text "Exit" :mnemonic \E)
+
+                        (sc/frame :id :the-frame
+                                  :title "ASL Recorder",
+                                  :content (sm/mig-panel :constraints [] :items [[game-position-panel "wrap"]
+                                                                                 [event-panel "growx, wrap"]
+                                                                                 [ok "align center"]]),
+                                  :menubar (sc/menubar :items [(sc/menu :text "File" :items [file-new file-open file-save file-save-as file-exit])])
+                                  :on-close :nothing)]
                        (let [ok-fn (fn [e] (process-the-game e))]
                          (sc/listen advance-turn-button :action advance-turn)
                          (sc/listen advance-attacker-button :action advance-attacker)
@@ -1192,13 +1205,9 @@
                          (sc/listen result :document (fn [_] (perform-activations result)))
                          (sc/listen add-event-button :action add-event)
                          (sc/listen ok :action ok-fn)
+                         (sc/listen the-frame :window-closing (fn [e] (save-game-if-necessary e do-file-exit)))
 
-                         (-> (sc/frame :title "ASL Recorder",
-                                       :content (sm/mig-panel :constraints [] :items [[game-position-panel "wrap"]
-                                                                                      [event-panel "growx, wrap"]
-                                                                                      [ok "align center"]]),
-                                       :menubar (sc/menubar :items [(sc/menu :text "File" :items [file-new file-open file-save file-save-as file-exit])])
-                                       :on-close :exit)
+                         (-> the-frame
                              (transition-to-rally-phase-reinforcements "Reinforcements")
                              sc/pack!
                              sc/show!))))))
