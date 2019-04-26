@@ -924,7 +924,7 @@
         defender-final-modifier-selection (when (= "Ambush" action-option-text)
                                             (-> r (sc/select [:#defender-final-modifier]) sc/selection))
         result-text (-> r (sc/select [:#result]) sc/text)]
-    (swap! the-game assoc :game-zip-loc append-event sub-phase-text action-option-text description-text die-rolls
+    (swap! the-game update :game-zip-loc append-event sub-phase-text action-option-text description-text die-rolls
            final-modifier-selection attacker-final-modifier-selection defender-final-modifier-selection result-text)
     (reset-event-panel e)))
 
@@ -1078,6 +1078,10 @@
     (sc/dispose! the-frame)
     (System/exit 0)))
 
+; TODO: Add initial setup dialog after game setup dialog
+; TODO: Copy button to left of description to copy previous event description (easier to move unit multiple times)
+; TODO: Status bar with last event
+; TODO: Movement did not transition to DF
 (defn -main
   [& args]
   (sc/native!)

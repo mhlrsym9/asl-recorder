@@ -1,20 +1,20 @@
 # asl-recorder
 
-FIXME: description
+Record ASL games as they are played.
 
 ## Installation
 
-Download from http://example.com/FIXME.
+Copy JAR file to local machine
 
 ## Usage
 
-FIXME: explanation
+Start by clicking on icon or
 
     $ java -jar asl-recorder-0.1.0-standalone.jar [args]
 
 ## Options
 
-FIXME: listing of options this app accepts.
+No Options at this time
 
 ## Examples
 
@@ -30,7 +30,7 @@ FIXME: listing of options this app accepts.
 
 ## License
 
-Copyright © 2019 FIXME
+Copyright © 2019
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
