@@ -885,11 +885,14 @@
     (open-file-fn e sub-phase)))
 
 (defn- transition-to-attacker-rout [e & rest]
-  (-> e
-      switch-sub-phase-panel-visibility
-      (update-sub-phase-panel "ATTACKER Rout" true false)
-      (establish-action-options ["Rout" "Low Crawl" "Interdiction" "Elimination" "Other"])
-      reset-event-panel))
+  (let [loc (get-current-game-zip-loc)
+        side1 (get-side1-from-loc loc)
+        next-rout-phase (str side1 " Rout")]
+    (-> e
+        switch-sub-phase-panel-visibility
+        (update-sub-phase-panel next-rout-phase true false)
+        (establish-action-options ["Rout" "Low Crawl" "Interdiction" "Elimination" "Other"])
+        reset-event-panel)))
 
 (defn- transition-to-defender-rout [e next-rout-phase]
   (-> e
@@ -1036,6 +1039,7 @@
                (try
                  (do
                    (proxy-super get)
+                   (swap! the-game assoc :is-modified? false)
                    (when next-fn (next-fn e)))
                  (catch ExecutionException e
                    (throw e))
@@ -1081,7 +1085,7 @@
 ; TODO: Add initial setup dialog after game setup dialog
 ; TODO: Copy button to left of description to copy previous event description (easier to move unit multiple times)
 ; TODO: Status bar with last event
-; TODO: Movement did not transition to DF
+
 (defn -main
   [& args]
   (sc/native!)

@@ -125,3 +125,12 @@
       (is (= 6 number-turns)))
     (let [test-game-loc (initial-game-zip-loc (create-game-start-xml "War" "German" "Russian" 7 true))]
       (is (= 7 (get-number-turns-from-loc test-game-loc))))))
+
+(deftest test-get-sub-phase-map
+  (testing "Make sure get-sub-phase-map works"
+    (let [test-game-loc (initial-game-zip-loc (create-game-start-xml "War" "German" "American" 7 true))
+          rout-sub-phase-map (get-sub-phase-map test-game-loc rout-phase-map)]
+      (is (some #{"American Rout"} (keys rout-sub-phase-map)))
+      (is (some #{"German Rout"} (keys rout-sub-phase-map)))
+      (is (= "American Rout" (:next-sub-phase (get rout-sub-phase-map "German Rout"))))
+      (is (nil? (:next-sub-phase (get rout-sub-phase-map "American Rout")))))))
