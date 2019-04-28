@@ -132,6 +132,23 @@
   (let [loc (get-current-game-zip-loc)]
     (get-number-turns-from-loc loc)))
 
+(defn get-previous-description-from-loc [loc]
+  (if-let [desc-loc (-> loc
+                     zip/node
+                     zip/xml-zip
+                     zip/down
+                     zip/rightmost)]
+    (-> desc-loc
+        (zip-xml/xml1-> :description)
+        zip/node
+        :content
+        first)
+    ""))
+
+(defn- get-previous-description []
+  (let [loc (get-current-game-zip-loc)]
+    (get-previous-description-from-loc loc)))
+
 (defn get-sub-phase-map [loc sub-phase-map]
   (let [side1 (get-side1-from-loc loc)
         side2 (get-side2-from-loc loc)
@@ -172,20 +189,20 @@
   (let [n (zip/node loc)
         sub-phase-text? (-> sub-phase str/blank? not)
         c (conj (vec (:content n)) (xml/element :event (merge {:action the-action-option} (when sub-phase-text? {:sub-phase sub-phase}))
-                                                (filter identity (list (xml/element :description {} the-description)
-                                                                       (when the-die-rolls
-                                                                         (xml/element :die-rolls {} (map #(xml/element :die-roll
-                                                                                                                       {:color (:color %)}
-                                                                                                                       (:die-roll %))
-                                                                                                         the-die-rolls)))
-                                                                       (when the-final-modifier
-                                                                         (xml/element :final-modifier {} the-final-modifier))
-                                                                       (when the-attacker-final-modifier
-                                                                         (xml/element :attacker-final-modifier {} the-attacker-final-modifier))
-                                                                       (when the-defender-final-modifier
-                                                                         (xml/element :defender-final-modifier {} the-defender-final-modifier))
-                                                                       (when the-result
-                                                                         (xml/element :result {} the-result))))))]
+                                                (xml/element :description {} the-description)
+                                                (when the-die-rolls
+                                                  (xml/element :die-rolls {} (map #(xml/element :die-roll
+                                                                                                {:color (:color %)}
+                                                                                                (:die-roll %))
+                                                                                  the-die-rolls)))
+                                                (when the-final-modifier
+                                                  (xml/element :final-modifier {} the-final-modifier))
+                                                (when the-attacker-final-modifier
+                                                  (xml/element :attacker-final-modifier {} the-attacker-final-modifier))
+                                                (when the-defender-final-modifier
+                                                  (xml/element :defender-final-modifier {} the-defender-final-modifier))
+                                                (when the-result
+                                                  (xml/element :result {} the-result))))]
     (zip/replace loc (assoc n :content c))))
 
 (defn append-phase [loc the-phase]
@@ -764,12 +781,14 @@
 (defn- reset-event-panel [e]
   (let [r (sc/to-root e)
         event-panel (sc/select r [:#event-panel])
-        {:keys [action-options description number-dice white-die-panel colored-die-panel
+        {:keys [action-options description previous-description number-dice white-die-panel colored-die-panel
                 movement-factors movement-points firepower
                 final-modifier attacker-final-modifier defender-final-modifier result]} (sc/group-by-id event-panel)
-        select-die-panel (fn [v] (sc/select r v))]
+        select-die-panel (fn [v] (sc/select r v))
+        the-previous-description (get-previous-description)]
     (sc/selection! action-options 0)
     (sc/text! description "")
+    (sc/text! previous-description the-previous-description)
     (sc/selection! number-dice 2)
     (clear-die-rolls (map (comp select-die-panel vector :panel-id-select) random-dice-info))
     (clear-die-rolls [white-die-panel colored-die-panel])
@@ -1169,10 +1188,12 @@
 
                         (sc/combobox :id :action-options)
                         (sc/text :id :description :text "")
+                        (sc/label :id :previous-description :text "")
                         (sc/text :id :result)
                         (sc/button :id :add-event-button :text "Add event")
                         (sm/mig-panel :id :event-panel :constraints ["" "[|fill, grow]" ""] :items [["Action:" "align right"] [action-options "span, wrap"]
                                                                                                     ["Description:" "align right"] [description "span, wrap"]
+                                                                                                    ["Previous description:" "align right"] [previous-description "span, wrap"]
                                                                                                     [standard-event-panel "hidemode 3, span, wrap, grow"]
                                                                                                     [random-event-panel "hidemode 3, span, wrap, grow"]
                                                                                                     ["Result:" "align right"] [result "span, wrap"]

@@ -8,7 +8,7 @@
   (testing "Try to add an event."
     (let [loc (get-current-game-zip-loc)
           new-loc (append-event loc "Reinforcements" "Place Reinforcements" "Add description" nil nil nil nil "Add result")
-          fe (-> new-loc zip/root zip/xml-zip zip/down zip/down zip/down zip/node :content first :content first)
+          fe (-> new-loc zip/root zip/xml-zip zip/down zip/down zip/down zip/node :content first :content)
           fa (-> fe first :content first)
           fr (-> fe second :content first)]
       (is (= fa "Add description"))
@@ -134,3 +134,10 @@
       (is (some #{"German Rout"} (keys rout-sub-phase-map)))
       (is (= "American Rout" (:next-sub-phase (get rout-sub-phase-map "German Rout"))))
       (is (nil? (:next-sub-phase (get rout-sub-phase-map "American Rout")))))))
+
+(deftest test-get-previous-description
+  (testing "Make sure get-previous-description works"
+    (let [loc (get-current-game-zip-loc)
+          new-loc (append-event loc "Reinforcements" "Place Reinforcements" "Add description" nil nil nil nil "Add result")
+          new-new-loc (append-event new-loc "Reinforcements" "Place Reinforcements" "New description" nil nil nil nil "Add another result")]
+      (is (= (get-previous-description-from-loc new-new-loc) "New description")))))
