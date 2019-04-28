@@ -132,6 +132,17 @@
   (let [loc (get-current-game-zip-loc)]
     (get-number-turns-from-loc loc)))
 
+(defn- get-current-attacker-from-loc [loc]
+  (-> loc
+      zip/up
+      zip/node
+      :attrs
+      :attacker))
+
+(defn- get-current-attacker []
+  (let [loc (get-current-game-zip-loc)]
+    (get-current-attacker-from-loc loc)))
+
 (defn get-previous-description-from-loc [loc]
   (if-let [desc-loc (-> loc
                      zip/node
@@ -152,8 +163,11 @@
 (defn get-sub-phase-map [loc sub-phase-map]
   (let [side1 (get-side1-from-loc loc)
         side2 (get-side2-from-loc loc)
-        attacker-fn (fn [s] (when s (str/replace s "ATTACKER" side1)))
-        defender-fn (fn [s] (when s (str/replace s "DEFENDER" side2)))
+        current-attacker (get-current-attacker-from-loc loc)
+        attacker-side (if (= current-attacker side1) side1 side2)
+        defender-side (if (= current-attacker side1) side2 side1)
+        attacker-fn (fn [s] (when s (str/replace s "ATTACKER" attacker-side)))
+        defender-fn (fn [s] (when s (str/replace s "DEFENDER" defender-side)))
         transform-fn (comp attacker-fn defender-fn)]
     (into {} (for [[k v] sub-phase-map] [(transform-fn k) (assoc v :next-sub-phase (transform-fn (:next-sub-phase v)))]))))
 
@@ -905,7 +919,7 @@
 
 (defn- transition-to-attacker-rout [e & rest]
   (let [loc (get-current-game-zip-loc)
-        side1 (get-side1-from-loc loc)
+        side1 (get-current-attacker-from-loc loc)
         next-rout-phase (str side1 " Rout")]
     (-> e
         switch-sub-phase-panel-visibility
