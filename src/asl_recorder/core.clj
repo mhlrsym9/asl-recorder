@@ -7,7 +7,8 @@
             [clojure.zip :as zip]
             [asl-recorder.swing-worker]
             [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd]]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [asl-recorder.tree-edit :as te])
   (:import [java.awt Cursor]
            [java.beans PropertyChangeEvent PropertyChangeListener]
            [java.io File ByteArrayOutputStream]
@@ -546,13 +547,13 @@
   (activate-die-panel e ["Place Smoke" "Recover SW"
                          "Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
                          "Prep Fire" "Final Fire" "Advancing Fire"
-                         "Morale Check" "Pin Task Check" "Wound Resolution" "Other"]
+                         "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Other"]
                       :#white-die-panel))
 
 (defn- activate-colored-die-during-fire-phase [e]
   (activate-die-panel e ["Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
                          "Prep Fire" "Final Fire" "Advancing Fire"
-                         "Morale Check" "Pin Task Check" "Other"]
+                         "Morale Check" "Pin Task Check" "Leader Loss Morale Check" "Leader Loss Task Check" "Other"]
                       :#colored-die-panel))
 
 (defn- activate-movement-factors-during-fire-phase [e]
@@ -576,7 +577,7 @@
                 :enabled? ((complement not-any?) #{action-option-text} ["Place Smoke" "Recover SW"
                                                                         "Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
                                                                         "Prep Fire" "Final Fire" "Advancing Fire"
-                                                                        "Morale Check" "Pin Task Check" "Wound Resolution" "Other"]))))
+                                                                        "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Other"]))))
 
 (defn- activate-result-during-fire-phase [e]
   (let [r (sc/to-root e)
@@ -585,7 +586,7 @@
                 :enabled? ((complement not-any?) #{action-option-text} ["Place Smoke" "Recover SW"
                                                                         "Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
                                                                         "Prep Fire" "Final Fire" "Advancing Fire"
-                                                                        "Morale Check" "Pin Task Check" "Wound Resolution" "Other"]))))
+                                                                        "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Other"]))))
 
 (defn- activate-event-button-for-remaining-actions-during-fire-phase [e]
   (let [r (sc/to-root e)
@@ -605,7 +606,7 @@
                       (some #{action-option-text} ["Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
                                                    "Prep Fire" "Final Fire" "Advancing Fire"])
                       (and description-text? white-die-selected? colored-die-selected? firepower-text? final-modifier-text? result-text?)
-                      (some #{action-option-text} ["Morale Check" "Pin Task Check"])
+                      (some #{action-option-text} ["Morale Check" "Pin Task Check" "Leader Loss Morale Check" "Leader Loss Task Check"])
                       (and description-text? white-die-selected? colored-die-selected? final-modifier-text? result-text?)
                       (= action-option-text "Wound Resolution") (and description-text? white-die-selected? final-modifier-text? result-text?)
                       (= action-option-text "Other") (or description-text? result-text?)
@@ -890,24 +891,24 @@
   (-> e
       switch-sub-phase-panel-visibility
       (update-sub-phase-panel "" false false)
-      (establish-action-options ["Prep Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Random Selection" "Other"])
+      (establish-action-options ["Prep Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Random Selection" "Other"])
       reset-event-panel))
 
 (defn- transition-to-movement [e]
   (-> e
       (establish-action-options ["Movement" "Assault Movement" "CX" "Place Smoke" "Recover SW"
                                "Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
-                               "Morale Check" "Pin Task Check" "Wound Resolution" "Random Selection" "Other"])
+                               "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Random Selection" "Other"])
       reset-event-panel))
 
 (defn- transition-to-defensive-fire [e]
   (-> e
-      (establish-action-options ["Final Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Random Selection" "Other"])
+      (establish-action-options ["Final Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Random Selection" "Other"])
       reset-event-panel))
 
 (defn- transition-to-advancing-fire [e]
   (-> e
-      (establish-action-options ["Advancing Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Random Selection" "Other"])
+      (establish-action-options ["Advancing Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Random Selection" "Other"])
       reset-event-panel))
 
 (defn- transition-to-rout [e]
@@ -1029,6 +1030,9 @@
                  (with-open [r (clojure.java.io/reader f)]
                    (let [loc (-> r
                                  xml/parse
+                                 te/update-game-element
+                                 te/turn-number-to-int
+                                 te/die-roll-to-int
                                  initial-game-zip-loc)]
                      (swap! the-game assoc :is-modified? false :file f :game-zip-loc loc)
                      (proxy-super publishFromClojure (into-array String ["Danger, Will Robinson!"]))))))
