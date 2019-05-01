@@ -5,6 +5,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.zip :as zip]
+            [asl-recorder.info :as info]
             [asl-recorder.swing-worker]
             [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd]]
             [clojure.string :as str]
@@ -1225,12 +1226,16 @@
                         (sc/menu-item :id :file-save-as :listen [:action (fn [e] (choose-file-save e nil))] :text "Save As..." :mnemonic \A)
                         (sc/menu-item :id :file-exit :listen [:action (fn [e] (save-game-if-necessary e do-file-exit))] :text "Exit" :mnemonic \E)
 
+                        (sc/menu-item :id :info-dice :listen [:action (fn [e] (info/dice e (get-current-game-zip-loc)))] :text "Dice...")
+                        (sc/menu-item :id :info-version :listen [:action info/version] :text "About...")
+
                         (sc/frame :id :the-frame
                                   :title "ASL Recorder",
                                   :content (sm/mig-panel :constraints [] :items [[game-position-panel "wrap"]
                                                                                  [event-panel "growx, wrap"]
                                                                                  [ok "align center"]]),
-                                  :menubar (sc/menubar :items [(sc/menu :text "File" :items [file-new file-open file-save file-save-as file-exit])])
+                                  :menubar (sc/menubar :items [(sc/menu :text "File" :items [file-new file-open file-save file-save-as file-exit])
+                                                               (sc/menu :text "Info" :items [info-dice info-version])])
                                   :on-close :nothing)]
                        (let [ok-fn (fn [e] (process-the-game e))]
                          (sc/listen advance-turn-button :action advance-turn)
