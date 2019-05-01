@@ -13,20 +13,25 @@
          (zip-xml/attr= :color "white")
          zip-xml/text)
 
+(defn- extract-the-dice-locations [the-xml-zip action color]
+  (zip-xml/xml-> the-xml-zip
+                 :turn :side :phase :event
+                 (zip-xml/attr= :action action)
+                 :die-rolls :die-roll
+                 (zip-xml/attr= :color color)))
+
+(defn- extract-the-dice-rolls [the-xml-zip action]
+  (let [die-fn (comp first zip/down)]
+    (apply map #(+ (die-fn %1) (die-fn %2)) (map (partial extract-the-dice-locations the-xml-zip action) ["white" "colored"]))))
+
 (defn dice [e loc]
   (let [r (sc/to-root e)
         sw (proxy [asl_recorder.swing_worker] []
              (doInBackground []
-               (let [the-dice-locs (-> loc
-                                       zip/root
-                                       zip/xml-zip
-                                       (zip-xml/xml-> :turn :side :phase :event
-                                                      (zip-xml/attr= :action "Advancing Fire")
-                                                      :die-rolls :die-roll
-                                                      (zip-xml/attr= :color "white")))
-                     the-sum (reduce (fn [r v] (+ r ((comp first zip/down) v))) 0 the-dice-locs)]
+               (let [xml-zip (-> loc zip/root zip/xml-zip)
+                     the-dice-rolls (mapcat (partial extract-the-dice-rolls xml-zip) ["Prep Fire" "Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP" "Final Fire" "Advancing Fire"])]
                  (proxy-super publishFromClojure (into-array String [(str "Average white die for fire attacks = "
-                                                                          (format "%.2f" (double (/ the-sum (count the-dice-locs)))))]))))
+                                                                          (format "%.2f" (double (/ (apply + the-dice-rolls) (count the-dice-rolls)))))]))))
              (process [chunks]
                (doseq [chunk chunks] (println chunk)))
              (done []
