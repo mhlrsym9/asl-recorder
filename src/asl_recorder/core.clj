@@ -5,6 +5,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.zip :as zip]
+            [asl-recorder.game-attributes :as ga]
             [asl-recorder.info :as info]
             [asl-recorder.swing-worker]
             [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd]]
@@ -102,37 +103,20 @@
 (defn- create-random-dice-panel-id-select [color]
   (keyword (str "#" color random-die-panel)))
 
-(defn- get-game-attributes [loc]
-  (-> loc
-      zip/up
-      zip/up
-      zip/up
-      zip/node
-      :attrs))
-
-(defn get-side1-from-loc [loc]
-  (:side1 (get-game-attributes loc)))
-
 (defn get-current-game-zip-loc []
   (-> the-game deref :game-zip-loc))
 
 (defn- get-side1 []
   (let [loc (get-current-game-zip-loc)]
-    (get-side1-from-loc loc)))
-
-(defn get-side2-from-loc [loc]
-  (:side2 (get-game-attributes loc)))
+    (ga/get-side1-from-loc loc)))
 
 (defn- get-side2 []
   (let [loc (get-current-game-zip-loc)]
-    (get-side2-from-loc loc)))
-
-(defn get-number-turns-from-loc [loc]
-  (:number-full-turns (get-game-attributes loc)))
+    (ga/get-side2-from-loc loc)))
 
 (defn- get-number-turns []
   (let [loc (get-current-game-zip-loc)]
-    (get-number-turns-from-loc loc)))
+    (ga/get-number-turns-from-loc loc)))
 
 (defn- get-current-attacker-from-loc [loc]
   (-> loc
@@ -163,8 +147,8 @@
     (get-previous-description-from-loc loc)))
 
 (defn get-sub-phase-map [loc sub-phase-map]
-  (let [side1 (get-side1-from-loc loc)
-        side2 (get-side2-from-loc loc)
+  (let [side1 (ga/get-side1-from-loc loc)
+        side2 (ga/get-side2-from-loc loc)
         current-attacker (get-current-attacker-from-loc loc)
         attacker-side (if (= current-attacker side1) side1 side2)
         defender-side (if (= current-attacker side1) side2 side1)
