@@ -185,24 +185,30 @@
     (sc/text! attacker the-attacker)
     (sc/text! phase the-phase)))
 
-(defn append-event [loc sub-phase the-action-option the-description the-die-rolls the-final-modifier the-attacker-final-modifier the-defender-final-modifier the-result]
+(defn append-event [loc {:keys [sub-phase action-option description movement-factors movement-points firepower die-rolls final-modifier attacker-final-modifier defender-final-modifier result]}]
   (let [n (zip/node loc)
-        sub-phase-text? (-> sub-phase str/blank? not)
-        c (conj (vec (:content n)) (xml/element :event (merge {:action the-action-option} (when sub-phase-text? {:sub-phase sub-phase}))
-                                                (xml/element :description {} the-description)
-                                                (when the-die-rolls
+        c (conj (vec (:content n)) (xml/element :event (merge {:action action-option} (when sub-phase {:sub-phase sub-phase}))
+                                                (when description
+                                                  (xml/element :description {} description))
+                                                (when movement-factors
+                                                  (xml/element :movement-factors {} movement-factors))
+                                                (when movement-points
+                                                  (xml/element :movement-points {} movement-points))
+                                                (when firepower
+                                                  (xml/element :firepower {} firepower))
+                                                (when die-rolls
                                                   (xml/element :die-rolls {} (map #(xml/element :die-roll
                                                                                                 {:color (:color %)}
                                                                                                 (:die-roll %))
-                                                                                  the-die-rolls)))
-                                                (when the-final-modifier
-                                                  (xml/element :final-modifier {} the-final-modifier))
-                                                (when the-attacker-final-modifier
-                                                  (xml/element :attacker-final-modifier {} the-attacker-final-modifier))
-                                                (when the-defender-final-modifier
-                                                  (xml/element :defender-final-modifier {} the-defender-final-modifier))
-                                                (when the-result
-                                                  (xml/element :result {} the-result))))]
+                                                                                  die-rolls)))
+                                                (when final-modifier
+                                                  (xml/element :final-modifier {} final-modifier))
+                                                (when attacker-final-modifier
+                                                  (xml/element :attacker-final-modifier {} attacker-final-modifier))
+                                                (when defender-final-modifier
+                                                  (xml/element :defender-final-modifier {} defender-final-modifier))
+                                                (when result
+                                                  (xml/element :result {} result))))]
     (zip/replace loc (assoc n :content c))))
 
 (defn append-phase [loc the-phase]
@@ -532,7 +538,7 @@
   (activate-die-panel e ["Place Smoke" "Recover SW"
                          "Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
                          "Prep Fire" "Final Fire" "Advancing Fire"
-                         "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Other"]
+                         "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Other"]
                       :#white-die-panel))
 
 (defn- activate-colored-die-during-fire-phase [e]
@@ -553,7 +559,7 @@
     (sc/config! (sc/select r [:#firepower])
                 :enabled? ((complement not-any?) #{action-option-text} ["Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
                                                                         "Prep Fire" "Final Fire" "Advancing Fire"
-                                                                        "Other"]))))
+                                                                        "SW Survival" "Other"]))))
 
 (defn- activate-final-modifier-during-fire-phase [e]
   (let [r (sc/to-root e)
@@ -571,7 +577,7 @@
                 :enabled? ((complement not-any?) #{action-option-text} ["Place Smoke" "Recover SW"
                                                                         "Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
                                                                         "Prep Fire" "Final Fire" "Advancing Fire"
-                                                                        "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Other"]))))
+                                                                        "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Other"]))))
 
 (defn- activate-event-button-for-remaining-actions-during-fire-phase [e]
   (let [r (sc/to-root e)
@@ -585,7 +591,7 @@
         final-modifier-text? (-> r (sc/select [:#final-modifier]) sc/selection)
         result-text? (-> r (sc/select [:#result]) sc/text string/blank? not)
         enable? (cond (some #{action-option-text} ["Movement" "Assault Movement"]) (and description-text? movement-factors-text?)
-                      (= action-option-text "CX") description-text?
+                      (some #{action-option-text} ["CX" "Drop SW" "Destroy SW"]) description-text?
                       (some #{action-option-text} ["Place Smoke" "Recover SW"])
                       (and description-text? white-die-selected? movement-factors-text? final-modifier-text? result-text?)
                       (some #{action-option-text} ["Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
@@ -594,6 +600,7 @@
                       (some #{action-option-text} ["Morale Check" "Pin Task Check" "Leader Loss Morale Check" "Leader Loss Task Check"])
                       (and description-text? white-die-selected? colored-die-selected? final-modifier-text? result-text?)
                       (= action-option-text "Wound Resolution") (and description-text? white-die-selected? final-modifier-text? result-text?)
+                      (= action-option-text "SW Survival") (and description-text? white-die-selected? firepower-text? result-text?)
                       (= action-option-text "Other") (or description-text? result-text?)
                       :else false)]
     (sc/config! add-event-button :enabled? enable?)))
@@ -876,24 +883,24 @@
   (-> e
       switch-sub-phase-panel-visibility
       (update-sub-phase-panel "" false false)
-      (establish-action-options ["Prep Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Random Selection" "Other"])
+      (establish-action-options ["Prep Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Other"])
       reset-event-panel))
 
 (defn- transition-to-movement [e]
   (-> e
-      (establish-action-options ["Movement" "Assault Movement" "CX" "Place Smoke" "Recover SW"
+      (establish-action-options ["Movement" "Assault Movement" "CX" "Place Smoke" "Drop SW" "Recover SW"
                                "Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
-                               "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Random Selection" "Other"])
+                               "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Other"])
       reset-event-panel))
 
 (defn- transition-to-defensive-fire [e]
   (-> e
-      (establish-action-options ["Final Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Random Selection" "Other"])
+      (establish-action-options ["Final Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Other"])
       reset-event-panel))
 
 (defn- transition-to-advancing-fire [e]
   (-> e
-      (establish-action-options ["Advancing Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Random Selection" "Other"])
+      (establish-action-options ["Advancing Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Other"])
       reset-event-panel))
 
 (defn- transition-to-rout [e]
@@ -936,18 +943,30 @@
         sub-phase-text (-> r (sc/select [:#sub-phase]) sc/text)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)
         description-text (-> r (sc/select [:#description]) sc/text)
+        movement-factors-text (-> r (sc/select [:#movement-factors]) sc/text)
+        movement-points-text (-> r (sc/select [:#movement-points]) sc/text)
+        firepower-text (-> r (sc/select [:#firepower]) sc/text)
         white-die-panel (-> r (sc/select [:#white-die-panel]))
         colored-die-panel (-> r (sc/select [:#colored-die-panel]))
         random-die-panels (map (fn [pid] (sc/select r [pid])) (map :panel-id-select random-dice-info))
         die-rolls (gather-die-rolls (concat (list white-die-panel colored-die-panel) random-die-panels))
-        final-modifier-selection (-> r (sc/select [:#final-modifier]) sc/selection)
-        attacker-final-modifier-selection (when (= "Ambush" action-option-text)
-                                            (-> r (sc/select [:#attacker-final-modifier]) sc/selection))
-        defender-final-modifier-selection (when (= "Ambush" action-option-text)
-                                            (-> r (sc/select [:#defender-final-modifier]) sc/selection))
-        result-text (-> r (sc/select [:#result]) sc/text)]
-    (swap! the-game update :game-zip-loc append-event sub-phase-text action-option-text description-text die-rolls
-           final-modifier-selection attacker-final-modifier-selection defender-final-modifier-selection result-text)
+        final-modifier (sc/select r [:#final-modifier])
+        attacker-final-modifier (sc/select r [:#attacker-final-modifier])
+        defender-final-modifier (sc/select r [:#defender-final-modifier])
+        result-text (-> r (sc/select [:#result]) sc/text)
+        not-blank-fn? (fn [s] (-> s str/blank? not))
+        parameters (merge (when (not-blank-fn? sub-phase-text) {:sub-phase sub-phase-text})
+                          {:action-option action-option-text}
+                          {:description description-text}
+                          (when (not-blank-fn? movement-factors-text) {:movement-factors movement-factors-text})
+                          (when (not-blank-fn? movement-points-text) {:movement-points movement-points-text})
+                          (when (not-blank-fn? firepower-text) {:firepower firepower-text})
+                          {:die-rolls die-rolls}
+                          (when (sc/config final-modifier :enabled?) {:final-modifier (sc/selection final-modifier)})
+                          (when (sc/config attacker-final-modifier :enabled?) {:attacker-final-modifier (sc/selection attacker-final-modifier)})
+                          (when (sc/config defender-final-modifier :enabled?) {:defender-final-modifier (sc/selection defender-final-modifier)})
+                          (when (not-blank-fn? result-text) {:result result-text}))]
+    (swap! the-game update :game-zip-loc append-event parameters)
     (reset-event-panel e)))
 
 (defn- create-new-game [d]
@@ -965,8 +984,10 @@
   (let [[_ _ phase :as game-time] ((juxt get-current-game-turn get-current-game-attacker get-current-game-phase) (:game-zip-loc @the-game))
         {:keys [open-file-fn]} (get phase-map phase)]
     (apply update-time e game-time)
-    (switch-sub-phase-panel-visibility e)
-    (open-file-fn e)))
+    (-> e
+        switch-sub-phase-panel-visibility
+        (update-sub-phase-panel "" false false)
+        open-file-fn)))
 
 (defn- perform-file-new [e d]
   (let [r (sc/to-root e)

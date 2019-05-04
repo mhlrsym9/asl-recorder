@@ -1,17 +1,20 @@
 (ns asl-recorder.core-test
   (:require [clojure.test :refer :all]
             [asl-recorder.core :refer :all]
+            [asl-recorder.game-attributes :as ga]
             [clojure.zip :as zip]
             [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd]]))
 
 (deftest test-append-event
   (testing "Try to add an event."
     (let [loc (get-current-game-zip-loc)
-          new-loc (append-event loc "Reinforcements" "Place Reinforcements" "Add description" nil nil nil nil "Add result")
+          new-loc (append-event loc {:sub-phase "Reinforcements" :action-option "Place Reinforcements" :description "Add description" :firepower 16 :result "Add result"})
           fe (-> new-loc zip/root zip/xml-zip zip/down zip/down zip/down zip/node :content first :content)
           fa (-> fe first :content first)
-          fr (-> fe second :content first)]
+          ff (-> fe second :content first)
+          fr (-> fe (nth 2) :content first)]
       (is (= fa "Add description"))
+      (is (= ff 16))
       (is (= fr "Add result")))))
 
 (deftest test-append-phase
@@ -109,22 +112,22 @@
 (deftest test-get-side1
   (testing "Make sure get-side1 returns German"
     (let [loc (get-current-game-zip-loc)
-          side1 (get-side1-from-loc loc)]
+          side1 (ga/get-side1-from-loc loc)]
       (is (= "German" side1)))))
 
 (deftest test-get-side2
   (testing "Make sure get-side2 returns Russian"
     (let [loc (get-current-game-zip-loc)
-          side2 (get-side2-from-loc loc)]
+          side2 (ga/get-side2-from-loc loc)]
       (is (= "Russian" side2)))))
 
 (deftest test-number-turns
   (testing "Make sure get-number-turns returns 6"
     (let [loc (get-current-game-zip-loc)
-          number-turns (get-number-turns-from-loc loc)]
+          number-turns (ga/get-number-turns-from-loc loc)]
       (is (= 6 number-turns)))
     (let [test-game-loc (initial-game-zip-loc (create-game-start-xml "War" "German" "Russian" 7 true))]
-      (is (= 7 (get-number-turns-from-loc test-game-loc))))))
+      (is (= 7 (ga/get-number-turns-from-loc test-game-loc))))))
 
 (deftest test-get-sub-phase-map
   (testing "Make sure get-sub-phase-map works"
@@ -138,6 +141,6 @@
 (deftest test-get-previous-description
   (testing "Make sure get-previous-description works"
     (let [loc (get-current-game-zip-loc)
-          new-loc (append-event loc "Reinforcements" "Place Reinforcements" "Add description" nil nil nil nil "Add result")
-          new-new-loc (append-event new-loc "Reinforcements" "Place Reinforcements" "New description" nil nil nil nil "Add another result")]
+          new-loc (append-event loc {:sub-phase "Reinforcements" :action-option "Place Reinforcements" :description "Add description" :result "Add result"})
+          new-new-loc (append-event new-loc {:sub-phase "Reinforcements" :action-option "Place Reinforcements" :description "New description" :result "Add another result"})]
       (is (= (get-previous-description-from-loc new-new-loc) "New description")))))
