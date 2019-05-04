@@ -1210,7 +1210,7 @@
                         (sc/menu-item :id :file-save-as :listen [:action (fn [e] (choose-file-save e nil))] :text "Save As..." :mnemonic \A)
                         (sc/menu-item :id :file-exit :listen [:action (fn [e] (save-game-if-necessary e do-file-exit))] :text "Exit" :mnemonic \E)
 
-                        (sc/menu-item :id :info-dice :listen [:action (fn [e] (info/dice e (get-current-game-zip-loc)))] :text "Dice...")
+                        (sc/menu-item :id :info-dice :listen [:action (fn [e] (info/dice-dialog e (get-current-game-zip-loc)))] :text "Dice...")
                         (sc/menu-item :id :info-version :listen [:action info/version] :text "About...")
 
                         (sc/frame :id :the-frame

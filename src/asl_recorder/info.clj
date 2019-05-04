@@ -2,6 +2,7 @@
   (:require [asl-recorder.game-attributes :as ga]
             [asl-recorder.swing-worker]
             [clojure.data.zip.xml :as zip-xml]
+            [clojure.string :as str]
             [clojure.zip :as zip]
             [seesaw [core :as sc]])
   (:import [java.awt Cursor]
@@ -53,15 +54,23 @@
     (concat morale-rolls-during-defensive-phases morale-rolls-during-attacking-phases)))
 
 (defn- calculate-average-dice-roll [the-dice-rolls]
-  (format "%.2f" (double (/ (apply + the-dice-rolls) (count the-dice-rolls)))))
+  (if (seq the-dice-rolls)
+    (format "%.2f" (double (/ (apply + the-dice-rolls) (count the-dice-rolls))))
+    "-"))
+
+(defn- generate-average-fire-dice-roll-prefix [side]
+  (str "Average roll for " side " fire attacks = "))
 
 (defn- generate-average-fire-dice-roll-report [side the-dice-rolls]
-  (str "Average roll for " side " fire attacks = " (calculate-average-dice-roll the-dice-rolls)))
+  (str (generate-average-fire-dice-roll-prefix side) (calculate-average-dice-roll the-dice-rolls)))
 
-(defn- generate-average-morale-roll-report [side the-dice-rolls]
-  (str "Average roll for " side " morale checks = " (calculate-average-dice-roll the-dice-rolls)))
+(defn- generate-average-morale-dice-roll-prefix [side]
+  (str "Average roll for " side " morale checks = "))
 
-(defn dice [e loc]
+(defn- generate-average-morale-dice-roll-report [side the-dice-rolls]
+  (str (generate-average-morale-dice-roll-prefix side) (calculate-average-dice-roll the-dice-rolls)))
+
+(defn- dice [d e loc]
   (let [r (sc/to-root e)
         sw (proxy [asl_recorder.swing_worker] []
              (doInBackground []
@@ -73,11 +82,24 @@
                      side2-fire-dice-rolls (get-fire-dice-rolls xml-zip side2 side1)
                      side2-morale-dice-rolls (get-morale-dice-rolls xml-zip side2 side1)]
                  (proxy-super publishFromClojure (into-array String [(generate-average-fire-dice-roll-report side1 side1-fire-dice-rolls)
-                                                                     (generate-average-morale-roll-report side1 side1-morale-dice-rolls)
+                                                                     (generate-average-morale-dice-roll-report side1 side1-morale-dice-rolls)
                                                                      (generate-average-fire-dice-roll-report side2 side2-fire-dice-rolls)
-                                                                     (generate-average-morale-roll-report side2 side2-morale-dice-rolls)]))))
+                                                                     (generate-average-morale-dice-roll-report side2 side2-morale-dice-rolls)]))))
              (process [chunks]
-               (doseq [chunk chunks] (println chunk)))
+               (let [side1 (ga/get-side1-from-loc loc)
+                     side2 (ga/get-side2-from-loc loc)
+                     dr (sc/to-root d)
+                     m {(generate-average-fire-dice-roll-prefix side1) :#side1-fire
+                        (generate-average-morale-dice-roll-prefix side1) :#side1-morale
+                        (generate-average-fire-dice-roll-prefix side2) :#side2-fire
+                        (generate-average-morale-dice-roll-prefix side2) :#side2-morale}]
+                 (doseq [chunk chunks]
+                   (let [fm (filter (fn [[k _]] (str/starts-with? chunk k)) m)]
+                     (when (seq? fm)
+                       (sc/text! (sc/select dr [(second (first fm))]) chunk))))
+                 (-> d
+                     sc/pack!
+                     sc/show!)))
              (done []
                (try
                  (do
@@ -96,5 +118,13 @@
     (doto sw
       (.addPropertyChangeListener pcl)
       (.execute))))
+
+(defn dice-dialog [e loc]
+  (-> (sc/dialog :content (sc/vertical-panel :items [(sc/horizontal-panel :items [(sc/label :id :side1-fire)])
+                                                     (sc/horizontal-panel :items [(sc/label :id :side1-morale)])
+                                                     (sc/horizontal-panel :items [(sc/label :id :side2-fire)])
+                                                     (sc/horizontal-panel :items [(sc/label :id :side2-morale)])])
+                 :option-type :default)
+      (dice e loc)))
 
 (defn version [_])
