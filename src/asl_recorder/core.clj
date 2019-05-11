@@ -8,7 +8,7 @@
             [asl-recorder.game-attributes :as ga]
             [asl-recorder.info :as info]
             [asl-recorder.swing-worker]
-            [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd] [layout :as layout]]
+            [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd] [layout :as layout] selector]
             [clojure.string :as str]
             [asl-recorder.tree-edit :as te])
   (:import [java.awt Cursor]
@@ -16,7 +16,8 @@
            [java.io File ByteArrayOutputStream]
            [java.util.concurrent ExecutionException]
            [javax.swing JFrame SwingWorker SwingWorker$StateValue JOptionPane ButtonGroup]
-           [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener])
+           [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener StackWizardSettings]
+           [com.github.cjwizard.pagetemplates TitledPageTemplate])
   (:gen-class))
 
 (declare transition-to-rally-phase
@@ -1019,23 +1020,39 @@
       (.execute))))
 
 (defn- do-file-new [e]
-  (let [initialPage (sc/construct WizardPage "Game Parameters" "Basic parameters about the scenario to be recorded.")
+  (let [initialPage (proxy [WizardPage seesaw.selector.Tag] ["Game Parameters" "Basic parameters about the scenario to be recorded."]
+                      (tag_name [] (.getSimpleName WizardPage))
+                      (rendering [path settings]
+                        (proxy-super rendering path settings)
+                        (doto this
+                          (.setFinishEnabled true)
+                          (.setNextEnabled false))))
+        wizardContainer (WizardContainer. (reify PageFactory
+                                            (isTransient [_ _ _] false)
+                                            (createPage [_ _ _]
+                                              (sc/abstract-panel
+                                                initialPage
+                                                (layout/box-layout :vertical)
+                                                {:border 5
+                                                 :items  [(sc/horizontal-panel :items ["Name: " (sc/text :id :name)])
+                                                          (sc/horizontal-panel :items ["First Move: " (sc/combobox :id :first-move :model ["German" "Russian" "American"])])
+                                                          (sc/horizontal-panel :items ["Other Side: " (sc/combobox :id :second-move :model ["German" "Russian" "American"])])
+                                                          (sc/horizontal-panel :items ["Number Turns: " (sc/text :id :number-turns)])
+                                                          (sc/horizontal-panel :items [(sc/checkbox :id :extra-move? :text "First Side has extra move?")])]})))
+                                          (TitledPageTemplate.)
+                                          (StackWizardSettings.))
+        dlg (sc/custom-dialog :modal? true :width 500 :height 500 :on-close :dispose :parent (sc/to-root e) :content wizardContainer)
         wizardListener (reify WizardListener
-                         (onCanceled [_ _ _])
-                         (onFinished [_ _ _])
-                         (onPageChanged [_ _ _]))
-        wizardContainer (doto (WizardContainer. (reify PageFactory
-                                                  (isTransient [_ _ _] false)
-                                                  (createPage [_ _ _]
-                                                    (sc/abstract-panel initialPage (layout/box-layout :vertical) {:items [(sc/horizontal-panel :items ["Name: " (sc/text :id :name)])
-                                                                                                                          (sc/horizontal-panel :items ["First Move: " (sc/combobox :id :first-move :model ["German" "Russian" "American"])])
-                                                                                                                          (sc/horizontal-panel :items ["Other Side: " (sc/combobox :id :second-move :model ["German" "Russian" "American"])])
-                                                                                                                          (sc/horizontal-panel :items ["Number Turns: " (sc/text :id :number-turns)])
-                                                                                                                          (sc/horizontal-panel :items [(sc/checkbox :id :extra-move? :text "First Side has extra move?")])]}))))
-                          (.setForgetTraversedPath true)
-                          (.addWizardListener wizardListener))
-        dlg (sc/custom-dialog :modal? true :width 500 :height 500 :on-close :dispose :parent (sc/to-root e) :content wizardContainer)]
-    (-> dlg sc/pack! sc/show!)))
+                         (onCanceled [_ _ _]
+                           (.dispose dlg))
+                         (onFinished [_ _ _]
+                           (perform-file-new e dlg)
+                           (.dispose dlg))
+                         (onPageChanged [_ _ _]))]
+    (doto (sc/config dlg :content)
+      (.setForgetTraversedPath true)
+      (.addWizardListener wizardListener))
+    (sc/show! dlg)))
 
 (comment
   (defn- do-file-new [e]
