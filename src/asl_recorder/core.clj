@@ -8,14 +8,15 @@
             [asl-recorder.game-attributes :as ga]
             [asl-recorder.info :as info]
             [asl-recorder.swing-worker]
-            [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd]]
+            [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd] [layout :as layout]]
             [clojure.string :as str]
             [asl-recorder.tree-edit :as te])
   (:import [java.awt Cursor]
            [java.beans PropertyChangeEvent PropertyChangeListener]
            [java.io File ByteArrayOutputStream]
            [java.util.concurrent ExecutionException]
-           [javax.swing JFrame SwingWorker SwingWorker$StateValue JOptionPane ButtonGroup])
+           [javax.swing JFrame SwingWorker SwingWorker$StateValue JOptionPane ButtonGroup]
+           [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener])
   (:gen-class))
 
 (declare transition-to-rally-phase
@@ -1018,15 +1019,35 @@
       (.execute))))
 
 (defn- do-file-new [e]
-  (-> (sc/dialog :content (sc/vertical-panel :items [(sc/horizontal-panel :items ["Name: " (sc/text :id :name)])
-                                                     (sc/horizontal-panel :items ["First Move: " (sc/combobox :id :first-move :model ["German" "Russian" "American"])])
-                                                     (sc/horizontal-panel :items ["Other Side: " (sc/combobox :id :second-move :model ["German" "Russian" "American"])])
-                                                     (sc/horizontal-panel :items ["Number Turns: " (sc/text :id :number-turns)])
-                                                     (sc/horizontal-panel :items [(sc/checkbox :id :extra-move? :text "First Side has extra move?")])])
-                 :option-type :ok-cancel
-                 :success-fn (fn [d] (perform-file-new e d)))
-      sc/pack!
-      sc/show!))
+  (let [initialPage (sc/construct WizardPage "Game Parameters" "Basic parameters about the scenario to be recorded.")
+        wizardListener (reify WizardListener
+                         (onCanceled [_ _ _])
+                         (onFinished [_ _ _])
+                         (onPageChanged [_ _ _]))
+        wizardContainer (doto (WizardContainer. (reify PageFactory
+                                                  (isTransient [_ _ _] false)
+                                                  (createPage [_ _ _]
+                                                    (sc/abstract-panel initialPage (layout/box-layout :vertical) {:items [(sc/horizontal-panel :items ["Name: " (sc/text :id :name)])
+                                                                                                                          (sc/horizontal-panel :items ["First Move: " (sc/combobox :id :first-move :model ["German" "Russian" "American"])])
+                                                                                                                          (sc/horizontal-panel :items ["Other Side: " (sc/combobox :id :second-move :model ["German" "Russian" "American"])])
+                                                                                                                          (sc/horizontal-panel :items ["Number Turns: " (sc/text :id :number-turns)])
+                                                                                                                          (sc/horizontal-panel :items [(sc/checkbox :id :extra-move? :text "First Side has extra move?")])]}))))
+                          (.setForgetTraversedPath true)
+                          (.addWizardListener wizardListener))
+        dlg (sc/custom-dialog :modal? true :width 500 :height 500 :on-close :dispose :parent (sc/to-root e) :content wizardContainer)]
+    (-> dlg sc/pack! sc/show!)))
+
+(comment
+  (defn- do-file-new [e]
+    (-> (sc/dialog :content (sc/vertical-panel :items [(sc/horizontal-panel :items ["Name: " (sc/text :id :name)])
+                                                       (sc/horizontal-panel :items ["First Move: " (sc/combobox :id :first-move :model ["German" "Russian" "American"])])
+                                                       (sc/horizontal-panel :items ["Other Side: " (sc/combobox :id :second-move :model ["German" "Russian" "American"])])
+                                                       (sc/horizontal-panel :items ["Number Turns: " (sc/text :id :number-turns)])
+                                                       (sc/horizontal-panel :items [(sc/checkbox :id :extra-move? :text "First Side has extra move?")])])
+                   :option-type :ok-cancel
+                   :success-fn (fn [d] (perform-file-new e d)))
+        sc/pack!
+        sc/show!)))
 
 (defn- perform-file-open [e f]
   (let [r (sc/to-root e)

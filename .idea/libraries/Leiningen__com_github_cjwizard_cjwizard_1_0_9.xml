@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Leiningen: com.github.cjwizard/cjwizard:1.0.9">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/com/github/cjwizard/cjwizard/1.0.9/cjwizard-1.0.9.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
