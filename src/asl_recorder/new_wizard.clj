@@ -1,6 +1,7 @@
 (ns asl-recorder.new-wizard
   (:require [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd] [layout :as layout] selector [table :as t]])
-  (:import [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener WizardSettings]))
+  (:import [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener WizardSettings]
+           (javax.swing.table AbstractTableModel)))
 
 (def ^{:private true} basic-parameters-page
   (proxy [WizardPage seesaw.selector.Tag] ["Game Parameters" "Basic parameters about the scenario to be recorded."]
@@ -36,17 +37,43 @@
     [(sc/radio :id :vertical-orientation :class :orientation-class :text "Vertical" :group the-button-group)
      (sc/radio :id :horizontal-orientation :class :orientation-class :text "Horizontal" :group the-button-group)]))
 
+(def ^{:private true} map-configuration-table-columns
+  [{:key :row :text "Row" :class java.lang.Integer}
+   {:key :column :text "Column" :class java.lang.Integer}
+   {:key :present? :text "Present?" :class java.lang.Boolean}
+   {:key :board-id :text "Board ID" :class java.lang.String}
+   {:key :upper-left? :text "Upper Left?" :class java.lang.Boolean}
+   {:key :upper-right? :text "Upper Right?" :class java.lang.Boolean}
+   {:key :lower-left? :text "Lower Left?" :class java.lang.Boolean}
+   {:key :lower-right? :text "Lower Right?" :class java.lang.Boolean}])
+
 (def ^{:private true} map-configuration-panel
-  (let [t (sc/table :id :map-table :model [:columns [:row :column :present? :board-id :upper-left? :upper-right? :lower-left? :lower-right?]
-                                           :rows [[0 0 true "y" false false false false]]])
+  (let [t-model-data (atom [[0 0 true "" false false false false]])
+        t-model (proxy [AbstractTableModel] []
+                  (getRowCount [] (count @t-model-data))
+                  (getColumnCount [] (count map-configuration-table-columns))
+                  (getValueAt [r c] (nth (nth @t-model-data r) c))
+                  (isCellEditable [r c] (or (= c 2)
+                                            (and (> c 2)
+                                                 (nth (nth @t-model-data r) 2))))
+                  (getColumnName [c] (:text (nth map-configuration-table-columns c)))
+                  (getColumnClass [c] (:class (nth map-configuration-table-columns c)))
+                  (setValueAt [o r c]
+                    (let [row-data (apply assoc (nth @t-model-data r) c o
+                                          (when (and (= c 2) (not o))
+                                            (proxy-super fireTableRowsUpdated r r)
+                                            '(3 "" 4 false 5 false 6 false)))]
+                      (swap! t-model-data assoc r row-data))))
+        t (sc/table :id :map-table :model t-model)
         update-table-fn (fn [e]
                           (let [r (sc/to-root e)
                                 number-rows (-> r (sc/select [:#number-rows]) sc/selection)
-                                number-columns (-> r (sc/select [:#number-columns]) sc/selection)]
-                            (t/clear! t)
-                            (dorun (for [r (range number-rows)
-                                         c (range number-columns)]
-                                     (t/insert-at! t (+ c (* r number-columns)) [r c true "y" false false false false])))))
+                                number-columns (-> r (sc/select [:#number-columns]) sc/selection)
+                                new-vec (vec (for [r (range number-rows)
+                                                   c (range number-columns)]
+                                               [r c true "" false false false false]))]
+                            (reset! t-model-data new-vec)
+                            (.fireTableDataChanged t-model)))
         p (sc/abstract-panel
             map-configuration-page
             (layout/box-layout :vertical)
