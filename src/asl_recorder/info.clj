@@ -12,6 +12,7 @@
 
 (defn- extract-the-dice-locations [the-xml-zip attacker phase action color]
   (zip-xml/xml-> the-xml-zip
+                 :turns
                  :turn
                  :side
                  (zip-xml/attr= :attacker attacker)

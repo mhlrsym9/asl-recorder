@@ -9,7 +9,7 @@
   (testing "Try to add an event."
     (let [loc (get-current-game-zip-loc)
           new-loc (append-event loc {:sub-phase "Reinforcements" :action-option "Place Reinforcements" :description "Add description" :firepower 16 :result "Add result"})
-          fe (-> new-loc zip/root zip/xml-zip zip/down zip/down zip/down zip/node :content first :content)
+          fe (-> new-loc zip/root zip/xml-zip zip/down zip/rightmost zip/down zip/down zip/down zip/node :content first :content)
           fa (-> fe first :content first)
           ff (-> fe second :content first)
           fr (-> fe (nth 2) :content first)]
@@ -21,7 +21,7 @@
   (testing "Try to add a phase."
     (let [loc (get-current-game-zip-loc)
           new-loc (append-phase loc "Prep Fire")
-          fp (-> new-loc zip/root zip/xml-zip zip/down zip/down zip/node :content)]
+          fp (-> new-loc zip/root zip/xml-zip zip/down zip/rightmost zip/down zip/down zip/node :content)]
       (is (= "Prep Fire" (-> fp second :attrs :name)))
       (is (= "Rally" (-> fp first :attrs :name))))))
 
@@ -29,7 +29,7 @@
   (testing "Try to add an attacker."
     (let [loc (get-current-game-zip-loc)
           new-loc (append-attacker loc "Russian")
-          fp (-> new-loc zip/root zip/xml-zip zip/down zip/node :content)]
+          fp (-> new-loc zip/root zip/xml-zip zip/down zip/rightmost zip/down zip/node :content)]
       (is (= "Russian" (-> fp second :attrs :attacker)))
       (is (= "German" (-> fp first :attrs :attacker))))))
 
@@ -37,7 +37,7 @@
   (testing "Try to add an turn."
     (let [loc (get-current-game-zip-loc)
           new-loc (append-turn loc 2)
-          fp (-> new-loc zip/root zip/xml-zip zip/node :content)]
+          fp (-> new-loc zip/root zip/xml-zip zip/down zip/rightmost zip/node :content)]
       (is (= 2 (-> fp second :attrs :number)))
       (is (= 1 (-> fp first :attrs :number))))))
 
@@ -84,7 +84,7 @@
 
 (deftest test-advance-game-rally-phase-with-american-attacker
   (testing "Try manipulating the rally phase map and then seeing that that carries through advance."
-    (let [the-xml (create-game-start-xml "War of the Rats 2" "American" "German" 6 true)
+    (let [the-xml (create-game-start-xml "War of the Rats 2" "American" "German" 6 true "vertical" [[[true "y" true false false false]]] [[]] [[]])
           loc (initial-game-zip-loc the-xml)
           updated-rally-phase-map (get-sub-phase-map loc rally-phase-map)
           r (advance-game-sub-phase loc "Reinforcements" updated-rally-phase-map)]
@@ -126,12 +126,12 @@
     (let [loc (get-current-game-zip-loc)
           number-turns (ga/get-number-turns-from-loc loc)]
       (is (= 6 number-turns)))
-    (let [test-game-loc (initial-game-zip-loc (create-game-start-xml "War" "German" "Russian" 7 true))]
+    (let [test-game-loc (initial-game-zip-loc (create-game-start-xml "War" "German" "Russian" 7 true "vertical" [[[true "y" true false false false]]] [[]] [[]]))]
       (is (= 7 (ga/get-number-turns-from-loc test-game-loc))))))
 
 (deftest test-get-sub-phase-map
   (testing "Make sure get-sub-phase-map works"
-    (let [test-game-loc (initial-game-zip-loc (create-game-start-xml "War" "German" "American" 7 true))
+    (let [test-game-loc (initial-game-zip-loc (create-game-start-xml "War" "German" "American" 7 true "vertical" [[[true "y" true false false false]]] [[]] [[]]))
           rout-sub-phase-map (get-sub-phase-map test-game-loc rout-phase-map)]
       (is (some #{"American Rout"} (keys rout-sub-phase-map)))
       (is (some #{"German Rout"} (keys rout-sub-phase-map)))

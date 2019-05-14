@@ -1,13 +1,24 @@
 (ns asl-recorder.new-wizard
-  (:require [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd] [layout :as layout] selector [table :as t]])
+  (:require [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd] [layout :as layout] selector [table :as t]]
+            [clojure.string :as str]
+            [seesaw.table :as table])
   (:import [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener WizardSettings]
            (javax.swing.table AbstractTableModel)))
+
+; TODO: Choose scenario from list... pre-fills basic-parameters and map-configuration.
+; TODO: Different size maps (HASL, DASL, etc.)
+; TODO: Move to second page iff all fields on first page set.
+; TODO: Move to second page iff first move name != second move name.
+; TODO: Move to third page iff all fields on second page set.
+; TODO: Make sure each id is unique.
+; TODO: Make sure all positions are valid ASL format and belong to one of the maps on the board.
+; TODO: UI issue moving to last page without pushing Add to OOB for last counter, then Back to that page, click Add, empty row added.
 
 (def ^{:private true} basic-parameters-page
   (proxy [WizardPage seesaw.selector.Tag] ["Game Parameters" "Basic parameters about the scenario to be recorded."]
     (tag_name [] (.getSimpleName WizardPage))))
 
-(def ^{:private true} basic-parameters-panel
+(defn- basic-parameters-panel []
   (let [p (sc/abstract-panel
             basic-parameters-page
             (layout/box-layout :vertical)
@@ -47,7 +58,7 @@
    {:key :lower-left? :text "Lower Left?" :class java.lang.Boolean}
    {:key :lower-right? :text "Lower Right?" :class java.lang.Boolean}])
 
-(def ^{:private true} map-configuration-panel
+(defn- map-configuration-panel []
   (let [t-model-data (atom [[0 0 true "" false false false false]])
         t-model (proxy [AbstractTableModel] []
                   (getRowCount [] (count @t-model-data))
@@ -88,43 +99,110 @@
                       :fill-v]})]
     p))
 
-(def ^{:private true} defender-initial-setup-page
-  (proxy [WizardPage seesaw.selector.Tag] ["DEFENDER Initial Setup" "Initial positions for all on-board DEFENDER units."]
-    (tag_name [] (.getSimpleName WizardPage))))
+(defn- second-move-initial-setup-page [name]
+  (let [title (str name " Initial Setup")
+        tip (str "Initial positions for all on-board " name " units.")]
+    (proxy [WizardPage seesaw.selector.Tag] [title tip]
+      (tag_name [] (.getSimpleName WizardPage)))))
 
-(def ^{:private true} defender-initial-setup-panel
+(defn- add-to-oob-enabled? [e]
+  (let [r (sc/to-root e)
+        s1 (-> r (sc/select [:#unique-id]) sc/text)
+        s2 (-> r (sc/select [:#position]) sc/text)]
+    (and (-> s1 str/blank? not)
+         (-> s2 str/blank? not))))
+
+(defn- configure-add-to-oob-enabled-state [e]
+  (let [r (sc/to-root e)
+        add-to-oob (sc/select r [:#add-to-oob])]
+    (sc/config! add-to-oob :enabled? (add-to-oob-enabled? e))))
+
+(defn- add-to-oob-action [oob-pound-id e]
+  (let [r (sc/to-root e)
+        unique-id (sc/select r [:#unique-id])
+        position (sc/select r [:#position])
+        remove-last-from-oob (sc/select r [:#remove-last-from-oob])
+        t (sc/select r [oob-pound-id])]
+    (table/insert-at! t (table/row-count t) {:unique-id (sc/text unique-id) :position (sc/text position)})
+    (sc/config! remove-last-from-oob :enabled? true)
+    (sc/text! unique-id "")
+    (sc/text! position "")))
+
+(defn- remove-from-oob-action [oob-pound-id e]
+  (let [r (sc/to-root e)
+        remove-last-from-oob (sc/select r [:#remove-last-from-oob])
+        t (sc/select r [oob-pound-id])]
+    (table/remove-at! t (- (table/row-count t) 1))
+    (sc/config! remove-last-from-oob :enabled? (< 0 (table/row-count t)))))
+
+(defn- initial-setup-layout [oob-id oob-pound-id]
+  (let [t (sc/table :id oob-id :model [:columns [:unique-id :position]])
+        unique-id (sc/text :id :unique-id :listen [:document (fn [_] (configure-add-to-oob-enabled-state t))])
+        position (sc/text :id :position :listen [:document (fn [_] (configure-add-to-oob-enabled-state t))])]
+    {:border 5
+     :items  [:fill-v
+              (sc/horizontal-panel :items ["Unique ID: " unique-id :fill-h "Position: " position])
+              [:fill-v 5]
+              (sc/horizontal-panel :items [(sc/button :id :add-to-oob :text "Add to OoB" :listen [:action (partial add-to-oob-action oob-pound-id)])
+                                           :fill-h
+                                           (sc/button :id :remove-last-from-oob :text "Remove last from OoB" :enabled? false :listen [:action (partial remove-from-oob-action oob-pound-id)])])
+              [:fill-v 5]
+              (sc/scrollable t)
+              :fill-v]}))
+
+(defn- second-move-initial-setup-panel [name]
   (let [p (sc/abstract-panel
-            defender-initial-setup-page
+            (second-move-initial-setup-page name)
             (layout/box-layout :vertical)
-            {:border 5
-             :items  [:fill-v
-                      (sc/horizontal-panel :items ["DEFENDER"])
-                      :fill-v]})]
+            (initial-setup-layout :oob-side2 :#oob-side2))]
     p))
 
-(def ^{:private true} attacker-initial-setup-page
-  (proxy [WizardPage seesaw.selector.Tag] ["ATTACKER Initial Setup" "Initial positions for all on-board ATTACKER units."]
-    (tag_name [] (.getSimpleName WizardPage))
-    (rendering [path settings]
-      (proxy-super rendering path settings)
-      (doto this
-        (.setFinishEnabled true)
-        (.setNextEnabled false)))))
+(defn- first-move-initial-setup-page [name]
+  (let [title (str name " Initial Setup")
+        tip (str "Initial positions for all on-board " name " units.")]
+    (proxy [WizardPage seesaw.selector.Tag] [title tip]
+      (tag_name [] (.getSimpleName WizardPage))
+      (rendering [path settings]
+        (proxy-super rendering path settings)
+        (doto this
+          (.setFinishEnabled true)
+          (.setNextEnabled false))))))
 
-(def ^{:private true} attacker-initial-setup-panel
+(defn- first-move-initial-setup-panel [name]
   (let [p (sc/abstract-panel
-            attacker-initial-setup-page
+            (first-move-initial-setup-page name)
             (layout/box-layout :vertical)
-            {:border 5
-             :items  [:fill-v
-                      (sc/horizontal-panel :items ["ATTACKER"])
-                      :fill-v]})]
+            (initial-setup-layout :oob-side1 :#oob-side1))]
     p))
-
-(def ^{:private true} new-wizard-panels [basic-parameters-panel map-configuration-panel defender-initial-setup-panel attacker-initial-setup-panel])
 
 (def new-wizard-page-factory
   (reify PageFactory
     (isTransient [_ _ _] false)
     (createPage [_ wizard-pages _]
-      (get new-wizard-panels (.size wizard-pages)))))
+      (let [c (.size wizard-pages)]
+        (cond (= 0 c) (basic-parameters-panel)
+              (= 1 c) (map-configuration-panel)
+              (= 2 c) (second-move-initial-setup-panel (-> (.get wizard-pages 0) (sc/select [:#second-move]) sc/selection))
+              (= 3 c) (first-move-initial-setup-panel (-> (.get wizard-pages 0) (sc/select [:#first-move]) sc/selection)))))))
+
+(defn extract-map-rows-from-wizard [d]
+  (let [r (sc/to-root d)
+        t (sc/select r [:#map-table])
+        number-columns (-> r (sc/select [:#number-columns]) sc/selection)
+        tm (sc/config t :model)
+        c (.getColumnCount tm)
+        the-maps (for [i (range (.getRowCount tm))]
+                   (map #(.getValueAt tm i %) (range 2 c)))]
+    (partition number-columns the-maps)))
+
+(defn- extract-initial-setup [d oob-id]
+  (let [r (sc/to-root d)
+        t (sc/select r [oob-id])]
+    (vec (for [i (range (table/row-count t))]
+           (vec (vals (table/value-at t i)))))))
+
+(defn extract-side2-initial-setup [d]
+  (extract-initial-setup d :#oob-side2))
+
+(defn extract-side1-initial-setup [d]
+  (extract-initial-setup d :#oob-side1))

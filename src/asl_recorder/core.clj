@@ -67,17 +67,39 @@
 (def rout-phase-map {"ATTACKER Rout" {:next-sub-phase "DEFENDER Rout" :transition-fn #'transition-to-defender-rout :open-file-fn #'transition-to-attacker-rout}
                      "DEFENDER Rout" {:next-sub-phase nil :transition-fn #'transition-to-advance :open-file-fn #'transition-to-defender-rout}})
 
-(defn create-game-start-xml [name side1 side2 number-turns additional-half-turn]
-  (xml/element :game {:name name :number-full-turns number-turns :additional-half-turn additional-half-turn :side1 side1 :side2 side2}
-               (xml/element :turn {:number 1}
-                            (xml/element :side {:attacker side1}
-                                         (xml/element :phase {:name "Rally"})))))
+(defn create-game-start-xml [name side1 side2 number-turns additional-half-turn orientation map-rows side2-initial-setup side1-initial-setup]
+  (xml/element :game {}
+               (xml/element :scenario {:name name :number-full-turns number-turns :additional-half-turn additional-half-turn :side1 side1 :side2 side2}
+                            (xml/element :map-configuration {:orientation orientation}
+                                         (xml/element :map-rows {}
+                                                      (doall (for [mr map-rows]
+                                                               (xml/element :map-row {}
+                                                                            (xml/element :maps {}
+                                                                                         (doall (for [[present board-id upper-left upper-right lower-left lower-right] mr]
+                                                                                                  (xml/element :map {:present     present
+                                                                                                                     :board-id    board-id
+                                                                                                                     :upper-left  upper-left
+                                                                                                                     :upper-right upper-right
+                                                                                                                     :lower-left  lower-left
+                                                                                                                     :lower-right lower-right})))))))))
+                            (xml/element :side2-initial-setup {}
+                                         (doall (for [[unique-id position] side2-initial-setup]
+                                                  (xml/element :setup {:unique-id unique-id :position position}))))
+                            (xml/element :side1-initial-setup {}
+                                         (doall (for [[unique-id position] side1-initial-setup]
+                                                  (xml/element :setup {:unique-id unique-id :position position})))))
+               (xml/element :turns {}
+                            (xml/element :turn {:number 1}
+                                         (xml/element :side {:attacker side1}
+                                                      (xml/element :phase {:name "Rally"}))))))
 
-(def game-start (create-game-start-xml "War of the Rats" "German" "Russian" 6 true))
+(def game-start (create-game-start-xml "War of the Rats" "German" "Russian" 6 false "horizontal" [[[true "z" false false true false]]] [["1.A" "zA1"]] []))
 
 (defn initial-game-zip-loc [the-xml]
   (-> the-xml
       zip/xml-zip
+      zip/down
+      zip/rightmost
       zip/down
       zip/rightmost
       zip/down
@@ -978,8 +1000,12 @@
         fm (sc/text (sc/select r [:#first-move]))
         sm (sc/text (sc/select r [:#second-move]))
         nt (sc/text (sc/select r [:#number-turns]))
-        em? (sc/selection (sc/select r [:#extra-move?]))]
-    (swap! the-game assoc :game-zip-loc (initial-game-zip-loc (create-game-start-xml name fm sm nt em?))
+        em? (sc/selection (sc/select r [:#extra-move?]))
+        orientation (if (sc/selection (sc/select r [:#vertical-orientation])) "Vertical" "Horizontal")
+        map-rows (nw/extract-map-rows-from-wizard d)
+        side2-initial-setup (nw/extract-side2-initial-setup d)
+        side1-initial-setup (nw/extract-side1-initial-setup d)]
+    (swap! the-game assoc :game-zip-loc (initial-game-zip-loc (create-game-start-xml name fm sm nt em? orientation map-rows side2-initial-setup side1-initial-setup))
            :is-modified? false
            :file nil)))
 
@@ -1020,34 +1046,24 @@
       (.addPropertyChangeListener pcl)
       (.execute))))
 
+; TODO: sc/invoke-later needed here?
 (defn- do-file-new [e]
-  (let [wizardContainer (WizardContainer. nw/new-wizard-page-factory
-                                          (TitledPageTemplate.)
-                                          (FlatWizardSettings.))
-        dlg (sc/custom-dialog :modal? true :width 500 :height 500 :on-close :dispose :parent (sc/to-root e) :content wizardContainer)
-        wizardListener (reify WizardListener
-                         (onCanceled [_ _ _]
-                           (.dispose dlg))
-                         (onFinished [_ _ _]
-                           (perform-file-new e dlg)
-                           (.dispose dlg))
-                         (onPageChanged [_ _ _]))]
-    (doto (sc/config dlg :content)
-      (.setForgetTraversedPath true)
-      (.addWizardListener wizardListener))
-    (sc/show! dlg)))
-
-(comment
-  (defn- do-file-new [e]
-    (-> (sc/dialog :content (sc/vertical-panel :items [(sc/horizontal-panel :items ["Name: " (sc/text :id :name)])
-                                                       (sc/horizontal-panel :items ["First Move: " (sc/combobox :id :first-move :model ["German" "Russian" "American"])])
-                                                       (sc/horizontal-panel :items ["Other Side: " (sc/combobox :id :second-move :model ["German" "Russian" "American"])])
-                                                       (sc/horizontal-panel :items ["Number Turns: " (sc/text :id :number-turns)])
-                                                       (sc/horizontal-panel :items [(sc/checkbox :id :extra-move? :text "First Side has extra move?")])])
-                   :option-type :ok-cancel
-                   :width 500 :height 500
-                   :success-fn (fn [d] (perform-file-new e d)))
-        sc/show!)))
+  (sc/invoke-later
+    (let [wizardContainer (WizardContainer. nw/new-wizard-page-factory
+                                            (TitledPageTemplate.)
+                                            (FlatWizardSettings.))
+          dlg (sc/custom-dialog :modal? true :width 500 :height 500 :on-close :dispose :parent (sc/to-root e) :content wizardContainer)
+          wizardListener (reify WizardListener
+                           (onCanceled [_ _ _]
+                             (.dispose dlg))
+                           (onFinished [_ _ _]
+                             (perform-file-new e dlg)
+                             (.dispose dlg))
+                           (onPageChanged [_ _ _]))]
+      (doto (sc/config dlg :content)
+        (.setForgetTraversedPath true)
+        (.addWizardListener wizardListener))
+      (sc/show! dlg))))
 
 (defn- perform-file-open [e f]
   (let [r (sc/to-root e)
@@ -1149,6 +1165,7 @@
 ; TODO: Add initial setup dialog after game setup dialog
 ; TODO: Copy button to left of description to copy previous event description (easier to move unit multiple times)
 ; TODO: Status bar with last event
+; TODO: Hookup the logging system.
 
 (defn -main
   [& args]

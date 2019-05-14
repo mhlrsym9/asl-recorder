@@ -6,6 +6,8 @@
       zip/up
       zip/up
       zip/up
+      zip/up
+      zip/down
       zip/node
       :attrs))
 
