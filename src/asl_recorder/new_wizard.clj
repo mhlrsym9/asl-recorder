@@ -1,7 +1,7 @@
 (ns asl-recorder.new-wizard
   (:require [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd] [layout :as layout] selector [table :as t]]
             [clojure.string :as str]
-            [seesaw.table :as table])
+            [seesaw [table :as table] [mig :as sm]])
   (:import [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener WizardSettings]
            (javax.swing.table AbstractTableModel)))
 
@@ -17,6 +17,9 @@
 (def ^{:private true} basic-parameters-page
   (proxy [WizardPage seesaw.selector.Tag] ["Game Parameters" "Basic parameters about the scenario to be recorded."]
     (tag_name [] (.getSimpleName WizardPage))))
+
+; TODO: If I make number-turns a spinner (like I should), there is a strange reflection problem where the spinners in the next
+; page are set to the value of this spinner... argh!
 
 (defn- basic-parameters-panel []
   (let [p (sc/abstract-panel
@@ -45,8 +48,21 @@
 
 (defn- create-orientation-radio-buttons []
   (let [the-button-group (sc/button-group)]
-    [(sc/radio :id :vertical-orientation :class :orientation-class :text "Vertical" :group the-button-group)
-     (sc/radio :id :horizontal-orientation :class :orientation-class :text "Horizontal" :group the-button-group)]))
+    [:fill-h
+     "Board Orientation:"
+     (sc/radio :id :vertical-orientation :class :orientation-class :text "Vertical" :group the-button-group :selected? true)
+     (sc/radio :id :horizontal-orientation :class :orientation-class :text "Horizontal" :group the-button-group)
+     :fill-h]))
+
+(defn- create-direction-radio-buttons []
+  (let [the-button-group (sc/button-group)]
+    [:fill-h
+     (sm/mig-panel :id :direction-panel :constraints ["wrap 2" "" ""] :items [["North is:"] [(sc/radio :id :up-direction :class :direction-class :text "above the first row of boards." :group the-button-group :selected? true)]
+                                                                                                [(sc/radio :id :right-direction :class :direction-class :text "to the right of the rightmost column of boards." :group the-button-group) "skip"]
+                                                                                                [(sc/radio :id :down-direction :class :direction-class :text "below the last row of boards." :group the-button-group) "skip"]
+                                                                                                [(sc/radio :id :left-direction :class :direction-class :text "to the left of the leftmost column of boards." :group the-button-group) "skip"]])
+     :fill-h]))
+
 
 (def ^{:private true} map-configuration-table-columns
   [{:key :row :text "Row" :class java.lang.Integer}
@@ -95,8 +111,9 @@
                       [:fill-v 5]
                       (sc/horizontal-panel :items (create-orientation-radio-buttons))
                       [:fill-v 5]
-                      (sc/scrollable t)
-                      :fill-v]})]
+                      (sc/horizontal-panel :items (create-direction-radio-buttons))
+                      [:fill-v 5]
+                      (sc/scrollable t)]})]
     p))
 
 (defn- second-move-initial-setup-page [name]
@@ -140,15 +157,13 @@
         unique-id (sc/text :id :unique-id :listen [:document (fn [_] (configure-add-to-oob-enabled-state t))])
         position (sc/text :id :position :listen [:document (fn [_] (configure-add-to-oob-enabled-state t))])]
     {:border 5
-     :items  [:fill-v
-              (sc/horizontal-panel :items ["Unique ID: " unique-id :fill-h "Position: " position])
+     :items  [(sc/horizontal-panel :items ["Unique ID: " unique-id [:fill-h 10] "Position: " position])
               [:fill-v 5]
               (sc/horizontal-panel :items [(sc/button :id :add-to-oob :text "Add to OoB" :listen [:action (partial add-to-oob-action oob-pound-id)])
                                            :fill-h
                                            (sc/button :id :remove-last-from-oob :text "Remove last from OoB" :enabled? false :listen [:action (partial remove-from-oob-action oob-pound-id)])])
               [:fill-v 5]
-              (sc/scrollable t)
-              :fill-v]}))
+              (sc/scrollable t)]}))
 
 (defn- second-move-initial-setup-panel [name]
   (let [p (sc/abstract-panel
@@ -184,6 +199,17 @@
               (= 1 c) (map-configuration-panel)
               (= 2 c) (second-move-initial-setup-panel (-> (.get wizard-pages 0) (sc/select [:#second-move]) sc/selection))
               (= 3 c) (first-move-initial-setup-panel (-> (.get wizard-pages 0) (sc/select [:#first-move]) sc/selection)))))))
+
+(defn extract-orientation [d]
+  (let [r (sc/to-root d)]
+    (if (sc/selection (sc/select r [:#vertical-orientation])) "Vertical" "Horizontal")))
+
+(defn extract-direction [d]
+  (let [r (sc/to-root d)]
+    (cond (sc/selection (sc/select r [:#up-direction])) "up"
+          (sc/selection (sc/select r [:#right-direction])) "right"
+          (sc/selection (sc/select r [:#down-direction])) "down"
+          :else "left")))
 
 (defn extract-map-rows-from-wizard [d]
   (let [r (sc/to-root d)

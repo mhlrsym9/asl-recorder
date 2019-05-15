@@ -67,10 +67,10 @@
 (def rout-phase-map {"ATTACKER Rout" {:next-sub-phase "DEFENDER Rout" :transition-fn #'transition-to-defender-rout :open-file-fn #'transition-to-attacker-rout}
                      "DEFENDER Rout" {:next-sub-phase nil :transition-fn #'transition-to-advance :open-file-fn #'transition-to-defender-rout}})
 
-(defn create-game-start-xml [name side1 side2 number-turns additional-half-turn orientation map-rows side2-initial-setup side1-initial-setup]
+(defn create-game-start-xml [name side1 side2 number-turns additional-half-turn orientation direction map-rows side2-initial-setup side1-initial-setup]
   (xml/element :game {}
                (xml/element :scenario {:name name :number-full-turns number-turns :additional-half-turn additional-half-turn :side1 side1 :side2 side2}
-                            (xml/element :map-configuration {:orientation orientation}
+                            (xml/element :map-configuration {:orientation orientation :direction direction}
                                          (xml/element :map-rows {}
                                                       (doall (for [mr map-rows]
                                                                (xml/element :map-row {}
@@ -93,7 +93,7 @@
                                          (xml/element :side {:attacker side1}
                                                       (xml/element :phase {:name "Rally"}))))))
 
-(def game-start (create-game-start-xml "War of the Rats" "German" "Russian" 6 false "horizontal" [[[true "z" false false true false]]] [["1.A" "zA1"]] []))
+(def game-start (create-game-start-xml "War of the Rats" "German" "Russian" 6 false "horizontal" "up" [[[true "z" false false true false]]] [["1.A" "zA1"]] []))
 
 (defn initial-game-zip-loc [the-xml]
   (-> the-xml
@@ -1001,11 +1001,12 @@
         sm (sc/text (sc/select r [:#second-move]))
         nt (sc/text (sc/select r [:#number-turns]))
         em? (sc/selection (sc/select r [:#extra-move?]))
-        orientation (if (sc/selection (sc/select r [:#vertical-orientation])) "Vertical" "Horizontal")
+        orientation (nw/extract-orientation d)
+        direction (nw/extract-direction d)
         map-rows (nw/extract-map-rows-from-wizard d)
         side2-initial-setup (nw/extract-side2-initial-setup d)
         side1-initial-setup (nw/extract-side1-initial-setup d)]
-    (swap! the-game assoc :game-zip-loc (initial-game-zip-loc (create-game-start-xml name fm sm nt em? orientation map-rows side2-initial-setup side1-initial-setup))
+    (swap! the-game assoc :game-zip-loc (initial-game-zip-loc (create-game-start-xml name fm sm nt em? orientation direction map-rows side2-initial-setup side1-initial-setup))
            :is-modified? false
            :file nil)))
 
