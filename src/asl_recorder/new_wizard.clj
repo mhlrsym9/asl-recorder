@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [seesaw [table :as table] [mig :as sm]])
   (:import [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener WizardSettings]
+           (javax.swing JSpinner)
            (javax.swing.table AbstractTableModel)))
 
 ; TODO: Choose scenario from list... pre-fills basic-parameters and map-configuration.
@@ -16,10 +17,10 @@
 
 (def ^{:private true} basic-parameters-page
   (proxy [WizardPage seesaw.selector.Tag] ["Game Parameters" "Basic parameters about the scenario to be recorded."]
-    (tag_name [] (.getSimpleName WizardPage))))
-
-; TODO: If I make number-turns a spinner (like I should), there is a strange reflection problem where the spinners in the next
-; page are set to the value of this spinner... argh!
+    (tag_name [] (.getSimpleName WizardPage))
+    (updateSettings [settings]
+      (proxy-super updateSettings settings)
+      (.remove settings "Spinner.formattedTextField"))))
 
 (defn- basic-parameters-panel []
   (let [p (sc/abstract-panel
@@ -33,7 +34,8 @@
                       [:fill-v 5]
                       (sc/horizontal-panel :items ["Other Side: " (sc/combobox :id :second-move :model ["German" "Russian" "American"])])
                       [:fill-v 5]
-                      (sc/horizontal-panel :items ["Number Turns: " (sc/text :id :number-turns :columns 100)])
+                      (sc/horizontal-panel :items ["Number Turns: " (sc/spinner :id :number-turns
+                                                                                :model (sc/spinner-model 1 :from 1 :to 15 :by 1))])
                       [:fill-v 5]
                       (sc/horizontal-panel :items [(sc/checkbox :id :extra-move? :text "First Side has extra move?")])
                       :fill-v]})
@@ -42,9 +44,21 @@
     (dorun (map #(maximum-size-fn [%]) [:#name :#first-move :#second-move :#number-turns]))
     p))
 
+; CJWizard has a bug where it reaches into the JSpinner, extracts the low-level
+; formattedTextField for the number model, and stores its value. The problem is
+; there is no way to change the name of this component, therefore if you use
+; a number-based JSpinner in a subsequent page, those JSpinners will be set to
+; the value of this one. CJWizard's rendering system sets the value of any component
+; it can find on each page if the component name matches. To avoid that, I need
+; to override the updateSettings implementation so I can remove that entry. Seesaw's id
+; system will allow me to extract the entry without using WizardSettings.
+
 (def ^{:private true} map-configuration-page
   (proxy [WizardPage seesaw.selector.Tag] ["Map Configuration" "Layout of the game area."]
-    (tag_name [] (.getSimpleName WizardPage))))
+    (tag_name [] (.getSimpleName WizardPage))
+    (updateSettings [settings]
+      (proxy-super updateSettings settings)
+      (.remove settings "Spinner.formattedTextField"))))
 
 (defn- create-orientation-radio-buttons []
   (let [the-button-group (sc/button-group)]
@@ -106,8 +120,15 @@
             (layout/box-layout :vertical)
             {:border 5
              :items  [:fill-v
-                      (sc/horizontal-panel :items ["Number of rows: " (sc/spinner :id :number-rows :model (sc/spinner-model 1 :from 1 :to 5 :by 1) :listen [:change update-table-fn])
-                                                   "Number of columns: " (sc/spinner :id :number-columns :model (sc/spinner-model 1 :from 1 :to 5 :by 1) :listen [:change update-table-fn])])
+                      (sc/horizontal-panel :items ["Number of rows: "
+                                                   (sc/spinner :id :number-rows
+                                                               :model (sc/spinner-model 1 :from 1 :to 5 :by 1)
+                                                               :listen [:change update-table-fn])
+                                                   [:fill-h 10]
+                                                   "Number of columns: "
+                                                   (sc/spinner :id :number-columns
+                                                               :model (sc/spinner-model 1 :from 1 :to 5 :by 1)
+                                                               :listen [:change update-table-fn])])
                       [:fill-v 5]
                       (sc/horizontal-panel :items (create-orientation-radio-buttons))
                       [:fill-v 5]

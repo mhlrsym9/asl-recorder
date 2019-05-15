@@ -999,7 +999,7 @@
         name (sc/text (sc/select r [:#name]))
         fm (sc/text (sc/select r [:#first-move]))
         sm (sc/text (sc/select r [:#second-move]))
-        nt (sc/text (sc/select r [:#number-turns]))
+        nt (sc/selection (sc/select r [:#number-turns]))
         em? (sc/selection (sc/select r [:#extra-move?]))
         orientation (nw/extract-orientation d)
         direction (nw/extract-direction d)
