@@ -22,9 +22,9 @@
              (recur (zip/next new-loc) modified?)))
          (recur (zip/next loc) modified?))))))
 
-(defn- found-game-element? [loc]
+(defn- found-scenario-element? [loc]
   (let [tag (:tag (zip/node loc))]
-    (= tag :game)))
+    (= tag :scenario)))
 
 (defn- found-turn-element? [loc]
   (let [tag (:tag (zip/node loc))]
@@ -34,7 +34,7 @@
   (let [tag (:tag (zip/node loc))]
     (= tag :die-roll)))
 
-(defn- update-the-game-element [node]
+(defn- update-the-scenario-element [node]
   (let [number-full-turns (get-in node [:attrs :number-full-turns])
         additional-half-turn (get-in node [:attrs :additional-half-turn])]
     (-> node
@@ -57,10 +57,10 @@
           (seq? c) (assoc node :content (map (fn [e] (Integer/parseInt e)) c))
           :else node)))
 
-(defn update-game-element [the-xml]
+(defn update-scenario-element [the-xml]
   (-> the-xml
       zip/xml-zip
-      (tree-edit found-game-element? update-the-game-element)))
+      (tree-edit found-scenario-element? update-the-scenario-element)))
 
 (defn turn-number-to-int [the-xml]
   (-> the-xml

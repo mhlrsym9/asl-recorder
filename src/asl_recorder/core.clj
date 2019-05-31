@@ -171,15 +171,18 @@
   (let [loc (get-current-game-zip-loc)]
     (get-previous-description-from-loc loc)))
 
-(defn get-sub-phase-map [loc sub-phase-map]
+(defn- create-side-transformation-fn [loc]
   (let [side1 (ga/get-side1-from-loc loc)
         side2 (ga/get-side2-from-loc loc)
         current-attacker (get-current-attacker-from-loc loc)
         attacker-side (if (= current-attacker side1) side1 side2)
         defender-side (if (= current-attacker side1) side2 side1)
         attacker-fn (fn [s] (when s (str/replace s "ATTACKER" attacker-side)))
-        defender-fn (fn [s] (when s (str/replace s "DEFENDER" defender-side)))
-        transform-fn (comp attacker-fn defender-fn)]
+        defender-fn (fn [s] (when s (str/replace s "DEFENDER" defender-side)))]
+    (comp attacker-fn defender-fn)))
+
+(defn get-sub-phase-map [loc sub-phase-map]
+  (let [transform-fn (create-side-transformation-fn loc)]
     (into {} (for [[k v] sub-phase-map] [(transform-fn k) (assoc v :next-sub-phase (transform-fn (:next-sub-phase v)))]))))
 
 (def random-dice-info (apply conj [{:color           white
@@ -266,7 +269,7 @@
     (-> loc zip/down zip/rightmost zip/node :attrs :sub-phase)
     (if (= "Rally" (get-current-game-phase loc))
       "Reinforcements"
-      "ATTACKER Rout")))
+      ((create-side-transformation-fn loc) "ATTACKER Rout"))))
 
 (defn get-current-game-attacker [loc]
   (-> loc zip/up zip/node :attrs :attacker))
@@ -1074,7 +1077,7 @@
                  (with-open [r (clojure.java.io/reader f)]
                    (let [loc (-> r
                                  xml/parse
-                                 te/update-game-element
+                                 te/update-scenario-element
                                  te/turn-number-to-int
                                  te/die-roll-to-int
                                  initial-game-zip-loc)]
