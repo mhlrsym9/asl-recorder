@@ -224,7 +224,7 @@
                                                   (xml/element :movement-points {} movement-points))
                                                 (when firepower
                                                   (xml/element :firepower {} firepower))
-                                                (when die-rolls
+                                                (when (seq die-rolls)
                                                   (xml/element :die-rolls {} (map #(xml/element :die-roll
                                                                                                 {:color (:color %)}
                                                                                                 (:die-roll %))
@@ -397,6 +397,11 @@
         the-radio-buttons (map #(get (sc/group-by-id die-panel) %) (map :id the-info))]
     (dorun (map (fn [i] (sc/config! i :enabled? enabled?)) the-radio-buttons))))
 
+(defn- are-die-radio-buttons-enabled? [die-panel]
+  (let [the-info (create-die-info (-> die-panel sc/user-data :color))
+        the-radio-buttons (map #(get (sc/group-by-id die-panel) %) (map :id the-info))]
+    (some true? (map (fn [i] (sc/config i :enabled?)) the-radio-buttons))))
+
 (defn- disable-die-radio-buttons [die-panel]
   (update-die-radio-buttons-enabled-state die-panel false))
 
@@ -425,11 +430,14 @@
 (defn- add-change-listener-to-die-radio-buttons [die-panel f]
   (dorun (map #(sc/listen % :selection f) (sc/select die-panel [:JRadioButton]))))
 
-(defn- activate-die-panel [e action-options die-panel]
+(defn- activate-die-panel [e action-options die-panel-key]
   (let [r (sc/to-root e)
-        action-option-text (-> r (sc/select [:#action-options]) sc/text)]
-    (update-die-radio-buttons-enabled-state (sc/select r [die-panel])
-                                            ((complement not-any?) #{action-option-text} action-options))))
+        action-option-text (-> r (sc/select [:#action-options]) sc/text)
+        die-panel (sc/select r [die-panel-key])
+        enabled? ((complement not-any?) #{action-option-text} action-options)]
+    (when (and (are-die-radio-buttons-enabled? die-panel) (not enabled?))
+      (clear-die-roll die-panel))
+    (update-die-radio-buttons-enabled-state die-panel enabled?)))
 
 (defn- activate-white-die-during-rally-phase [e]
   (activate-die-panel e ["Recover SW" "Repair SW" "Self Rally" "Wound Resolution" "Leader Creation" "Unit Rally" "Other"] :#white-die-panel))
