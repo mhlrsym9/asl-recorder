@@ -572,14 +572,18 @@
 
 (defn- activate-white-die-during-fire-phase [e]
   (activate-die-panel e ["Place Smoke" "Recover SW"
-                         "Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
-                         "Prep Fire" "Final Fire" "Advancing Fire"
+                         "Defensive First Fire (To Hit)" "Defensive First Fire (IFT)" "Subsequent First Fire" "Final Protective Fire" "Intensive Fire (To Hit)" "Intensive Fire (IFT)" "Residual FP"
+                         "Prep Fire (To Hit)" "Prep Fire (IFT)"
+                         "Final Fire (To Hit)" "Final Fire (IFT)"
+                         "Advancing Fire (To Hit)" "Advancing Fire (IFT)"
                          "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Other"]
                       :#white-die-panel))
 
 (defn- activate-colored-die-during-fire-phase [e]
-  (activate-die-panel e ["Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
-                         "Prep Fire" "Final Fire" "Advancing Fire"
+  (activate-die-panel e ["Defensive First Fire (To Hit)" "Defensive First Fire (IFT)" "Subsequent First Fire" "Final Protective Fire" "Intensive Fire (To Hit)" "Intensive Fire (IFT)" "Residual FP"
+                         "Prep Fire (To Hit)" "Prep Fire (IFT)"
+                         "Final Fire (To Hit)" "Final Fire (IFT)"
+                         "Advancing Fire (To Hit)" "Advancing Fire (IFT)"
                          "Morale Check" "Pin Task Check" "Leader Loss Morale Check" "Leader Loss Task Check" "Other"]
                       :#colored-die-panel))
 
@@ -593,8 +597,10 @@
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
     (sc/config! (sc/select r [:#firepower])
-                :enabled? ((complement not-any?) #{action-option-text} ["Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
-                                                                        "Prep Fire" "Final Fire" "Advancing Fire"
+                :enabled? ((complement not-any?) #{action-option-text} ["Defensive First Fire (To Hit)" "Defensive First Fire (IFT)" "Subsequent First Fire" "Final Protective Fire" "Intensive Fire (To Hit)" "Intensive Fire (IFT)" "Residual FP"
+                                                                        "Prep Fire (To Hit)" "Prep Fire (IFT)"
+                                                                        "Final Fire (To Hit)" "Final Fire (IFT)"
+                                                                        "Advancing Fire (To Hit)" "Advancing Fire (IFT)"
                                                                         "SW Survival" "Other"]))))
 
 (defn- activate-final-modifier-during-fire-phase [e]
@@ -602,8 +608,10 @@
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
     (sc/config! (sc/select r [:#final-modifier])
                 :enabled? ((complement not-any?) #{action-option-text} ["Place Smoke" "Recover SW"
-                                                                        "Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
-                                                                        "Prep Fire" "Final Fire" "Advancing Fire"
+                                                                        "Defensive First Fire (To Hit)" "Defensive First Fire (IFT)" "Subsequent First Fire" "Final Protective Fire" "Intensive Fire (To Hit)" "Intensive Fire (IFT)" "Residual FP"
+                                                                        "Prep Fire (To Hit)" "Prep Fire (IFT)"
+                                                                        "Final Fire (To Hit)" "Final Fire (IFT)"
+                                                                        "Advancing Fire (To Hit)" "Advancing Fire (IFT)"
                                                                         "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "Other"]))))
 
 (defn- activate-result-during-fire-phase [e]
@@ -611,8 +619,10 @@
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
     (sc/config! (sc/select r [:#result])
                 :enabled? ((complement not-any?) #{action-option-text} ["Place Smoke" "Recover SW"
-                                                                        "Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
-                                                                        "Prep Fire" "Final Fire" "Advancing Fire"
+                                                                        "Defensive First Fire (To Hit)" "Defensive First Fire (IFT)" "Subsequent First Fire" "Final Protective Fire" "Intensive Fire (To Hit)" "Intensive Fire (IFT)" "Residual FP"
+                                                                        "Prep Fire (To Hit)" "Prep Fire (IFT)"
+                                                                        "Final Fire (To Hit)" "Final Fire (IFT)"
+                                                                        "Advancing Fire (To Hit)" "Advancing Fire (IFT)"
                                                                         "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Other"]))))
 
 (defn- activate-event-button-for-remaining-actions-during-fire-phase [e]
@@ -630,8 +640,13 @@
                       (some #{action-option-text} ["CX" "Drop SW" "Destroy SW"]) description-text?
                       (some #{action-option-text} ["Place Smoke" "Recover SW"])
                       (and description-text? white-die-selected? movement-factors-text? final-modifier-text? result-text?)
-                      (some #{action-option-text} ["Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
-                                                   "Prep Fire" "Final Fire" "Advancing Fire"])
+                      (some #{action-option-text} ["Defensive First Fire (To Hit)" "Defensive First Fire (IFT)"
+                                                   "Subsequent First Fire" "Final Protective Fire"
+                                                   "Intensive Fire (To Hit)" "Intensive Fire (IFT)"
+                                                   "Residual FP"
+                                                   "Prep Fire (To Hit)" "Prep Fire (IFT)"
+                                                   "Final Fire (To Hit)" "Final Fire (IFT)"
+                                                   "Advancing Fire (To Hit)" "Advancing Fire (IFT)"])
                       (and description-text? white-die-selected? colored-die-selected? firepower-text? final-modifier-text? result-text?)
                       (some #{action-option-text} ["Morale Check" "Pin Task Check" "Leader Loss Morale Check" "Leader Loss Task Check"])
                       (and description-text? white-die-selected? colored-die-selected? final-modifier-text? result-text?)
@@ -919,24 +934,26 @@
   (-> e
       switch-sub-phase-panel-visibility
       (update-sub-phase-panel "" false false)
-      (establish-action-options ["Prep Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Other"])
+      (establish-action-options ["Prep Fire (To Hit)" "Prep Fire (IFT)" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Other"])
       reset-event-panel))
 
 (defn- transition-to-movement [e]
   (-> e
       (establish-action-options ["Movement" "Assault Movement" "CX" "Place Smoke" "Drop SW" "Recover SW"
-                               "Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP"
-                               "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Other"])
+                                 "Defensive First Fire (To Hit)" "Defensive First Fire (IFT)"
+                                 "Subsequent First Fire" "Final Protective Fire"
+                                 "Intensive Fire (To Hit)" "Intensive Fire (IFT)" "Residual FP"
+                                 "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Other"])
       reset-event-panel))
 
 (defn- transition-to-defensive-fire [e]
   (-> e
-      (establish-action-options ["Final Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Other"])
+      (establish-action-options ["Final Fire (To Hit)" "Final Fire (IFT)" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Other"])
       reset-event-panel))
 
 (defn- transition-to-advancing-fire [e]
   (-> e
-      (establish-action-options ["Advancing Fire" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Other"])
+      (establish-action-options ["Advancing Fire (To Hit)" "Advancing Fire (IFT)" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Other"])
       reset-event-panel))
 
 (defn- transition-to-rout [e]
@@ -1088,6 +1105,7 @@
                                  te/update-scenario-element
                                  te/turn-number-to-int
                                  te/die-roll-to-int
+                                 te/fire-to-fire-ift
                                  initial-game-zip-loc)]
                      (swap! the-game assoc :is-modified? false :file f :game-zip-loc loc)
                      (proxy-super publishFromClojure (into-array String ["Danger, Will Robinson!"]))))))

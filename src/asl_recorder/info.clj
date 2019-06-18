@@ -23,9 +23,14 @@
                  :die-rolls :die-roll
                  (zip-xml/attr= :color color)))
 
-(def attacking-fire-actions ["Prep Fire" "Advancing Fire"])
+(def attacking-fire-actions ["Prep Fire (To Hit)" "Prep Fire (IFT)"
+                             "Advancing Fire (To Hit)" "Advancing Fire (IFT)"])
 
-(def defending-fire-actions ["Defensive First Fire" "Subsequent First Fire" "Final Protective Fire" "Residual FP" "Final Fire"])
+(def defending-fire-actions ["Defensive First Fire (To Hit)" "Defensive First Fire (IFT)"
+                             "Subsequent First Fire"
+                             "Final Protective Fire"
+                             "Residual FP"
+                             "Final Fire (To Hit)" "Final Fire (IFT)"])
 
 (def attacking-phases ["Prep Fire" "Advancing Fire"])
 

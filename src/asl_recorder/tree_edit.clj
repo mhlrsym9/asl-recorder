@@ -34,6 +34,13 @@
   (let [tag (:tag (zip/node loc))]
     (= tag :die-roll)))
 
+(defn- found-fire? [fire loc]
+  (let [node (zip/node loc)
+        tag (:tag node)]
+    (when (= tag :event)
+      (let [action (get-in node [:attrs :action])]
+        (= action fire)))))
+
 (defn- update-the-scenario-element [node]
   (let [number-full-turns (get-in node [:attrs :number-full-turns])
         additional-half-turn (get-in node [:attrs :additional-half-turn])]
@@ -57,6 +64,9 @@
           (seq? c) (assoc node :content (map (fn [e] (Integer/parseInt e)) c))
           :else node)))
 
+(defn- convert-fire-to-fire-ift [fire node]
+  (assoc-in node [:attrs :action] fire))
+
 (defn update-scenario-element [the-xml]
   (-> the-xml
       zip/xml-zip
@@ -72,3 +82,15 @@
       zip/xml-zip
       (tree-edit found-die-roll-element? convert-die-roll-to-int)))
 
+(def ^{:private? true} prep-fire "Prep Fire")
+(def ^{:private? true} defensive-first-fire "Defensive First Fire")
+(def ^{:private? true} final-fire "Final Fire")
+(def ^{:private? true} advancing-fire "Advancing Fire")
+(def ^{:private? true} ift " (IFT)")
+
+(defn fire-to-fire-ift [the-xml]
+  ((apply comp (map (fn [s] (partial (fn [x] (-> x
+                                            zip/xml-zip
+                                            (tree-edit (partial found-fire? s)
+                                                       (partial convert-fire-to-fire-ift (str s ift)))))))
+               [prep-fire defensive-first-fire final-fire advancing-fire])) the-xml))
