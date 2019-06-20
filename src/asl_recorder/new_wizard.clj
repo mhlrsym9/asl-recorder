@@ -143,22 +143,22 @@
     (proxy [WizardPage seesaw.selector.Tag] [title tip]
       (tag_name [] (.getSimpleName WizardPage)))))
 
-(defn- add-to-oob-enabled? [e]
+(defn- add-to-oob-enabled? [unique-pound-id position-pound-id e]
   (let [r (sc/to-root e)
-        s1 (-> r (sc/select [:#unique-id]) sc/text)
-        s2 (-> r (sc/select [:#position]) sc/text)]
+        s1 (-> r (sc/select [unique-pound-id]) sc/text)
+        s2 (-> r (sc/select [position-pound-id]) sc/text)]
     (and (-> s1 str/blank? not)
          (-> s2 str/blank? not))))
 
-(defn- configure-add-to-oob-enabled-state [e]
+(defn- configure-add-to-oob-enabled-state [unique-pound-id position-pound-id e]
   (let [r (sc/to-root e)
         add-to-oob (sc/select r [:#add-to-oob])]
-    (sc/config! add-to-oob :enabled? (add-to-oob-enabled? e))))
+    (sc/config! add-to-oob :enabled? (add-to-oob-enabled? unique-pound-id position-pound-id e))))
 
-(defn- add-to-oob-action [oob-pound-id e]
+(defn- add-to-oob-action [unique-pound-id position-pound-id oob-pound-id e]
   (let [r (sc/to-root e)
-        unique-id (sc/select r [:#unique-id])
-        position (sc/select r [:#position])
+        unique-id (sc/select r [unique-pound-id])
+        position (sc/select r [position-pound-id])
         remove-last-from-oob (sc/select r [:#remove-last-from-oob])
         t (sc/select r [oob-pound-id])]
     (table/insert-at! t (table/row-count t) {:unique-id (sc/text unique-id) :position (sc/text position)})
@@ -173,14 +173,14 @@
     (table/remove-at! t (- (table/row-count t) 1))
     (sc/config! remove-last-from-oob :enabled? (< 0 (table/row-count t)))))
 
-(defn- initial-setup-layout [oob-id oob-pound-id]
+(defn- initial-setup-layout [unique-id unique-pound-id position-id position-pound-id oob-id oob-pound-id]
   (let [t (sc/table :id oob-id :model [:columns [:unique-id :position]])
-        unique-id (sc/text :id :unique-id :listen [:document (fn [_] (configure-add-to-oob-enabled-state t))])
-        position (sc/text :id :position :listen [:document (fn [_] (configure-add-to-oob-enabled-state t))])]
+        unique-id (sc/text :id unique-id :listen [:document (fn [_] (configure-add-to-oob-enabled-state unique-pound-id position-pound-id t))])
+        position (sc/text :id position-id :listen [:document (fn [_] (configure-add-to-oob-enabled-state unique-pound-id position-pound-id t))])]
     {:border 5
      :items  [(sc/horizontal-panel :items ["Unique ID: " unique-id [:fill-h 10] "Position: " position])
               [:fill-v 5]
-              (sc/horizontal-panel :items [(sc/button :id :add-to-oob :text "Add to OoB" :listen [:action (partial add-to-oob-action oob-pound-id)])
+              (sc/horizontal-panel :items [(sc/button :id :add-to-oob :text "Add to OoB" :listen [:action (partial add-to-oob-action unique-pound-id position-pound-id oob-pound-id)])
                                            :fill-h
                                            (sc/button :id :remove-last-from-oob :text "Remove last from OoB" :enabled? false :listen [:action (partial remove-from-oob-action oob-pound-id)])])
               [:fill-v 5]
@@ -190,7 +190,7 @@
   (let [p (sc/abstract-panel
             (second-move-initial-setup-page name)
             (layout/box-layout :vertical)
-            (initial-setup-layout :oob-side2 :#oob-side2))]
+            (initial-setup-layout :unique-id2 :#unique-id2 :position-id2 :#position-id2 :oob-side2 :#oob-side2))]
     p))
 
 (defn- first-move-initial-setup-page [name]
@@ -208,7 +208,7 @@
   (let [p (sc/abstract-panel
             (first-move-initial-setup-page name)
             (layout/box-layout :vertical)
-            (initial-setup-layout :oob-side1 :#oob-side1))]
+            (initial-setup-layout :unique-id1 :#unique-id1 :position-id1 :#position-id1 :oob-side1 :#oob-side1))]
     p))
 
 (def new-wizard-page-factory
