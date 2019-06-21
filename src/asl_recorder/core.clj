@@ -1023,19 +1023,14 @@
     (reset-event-panel e)))
 
 (defn- create-new-game [d]
-  (let [r (sc/to-root d)
-        name (sc/text (sc/select r [:#name]))
-        fm (sc/text (sc/select r [:#first-move]))
-        sm (sc/text (sc/select r [:#second-move]))
-        nt (sc/selection (sc/select r [:#number-turns]))
-        em? (sc/selection (sc/select r [:#extra-move?]))
+  (let [{:keys [name fm sm nt em?]} (nw/extract-basic-parameters d)
         orientation (nw/extract-orientation d)
         direction (nw/extract-direction d)
         map-rows (nw/extract-map-rows-from-wizard d)
         side2-initial-setup (nw/extract-side2-initial-setup d)
         side1-initial-setup (nw/extract-side1-initial-setup d)]
     (swap! the-game assoc :game-zip-loc (initial-game-zip-loc (create-game-start-xml name fm sm nt em? orientation direction map-rows side2-initial-setup side1-initial-setup))
-           :is-modified? false
+           :is-modified? true
            :file nil)))
 
 (defn- reset-ui-after-new-game-loaded [e]

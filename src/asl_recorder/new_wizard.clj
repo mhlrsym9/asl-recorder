@@ -13,7 +13,6 @@
 ; TODO: Move to third page iff all fields on second page set.
 ; TODO: Make sure each id is unique.
 ; TODO: Make sure all positions are valid ASL format and belong to one of the maps on the board.
-; TODO: UI issue moving to last page without pushing Add to OOB for last counter, then Back to that page, click Add, empty row added.
 
 (def ^{:private true} basic-parameters-page
   (proxy [WizardPage seesaw.selector.Tag] ["Game Parameters" "Basic parameters about the scenario to be recorded."]
@@ -21,6 +20,14 @@
     (updateSettings [settings]
       (proxy-super updateSettings settings)
       (.remove settings "Spinner.formattedTextField"))))
+
+; The wizard has problems destroying pages if you back up in that the standard seesaw
+; select method thinks there are multiple elements for each created seesaw id, and thus
+; seems to return the first created (select w/ id returns only one element). Therefore,
+; as each panel is created, the code adds a reference to the actual current panel into
+; this stateful map (argh!). When the data is extracted, the code uses these references
+; instead of the dialog root to extract the data in the last instance of each panel.
+(def ^{:private true} panel-map (atom {:basic-parameters nil :map-configuration nil :side-2 nil :side-1 nil}))
 
 (defn- basic-parameters-panel []
   (let [p (sc/abstract-panel
@@ -42,6 +49,7 @@
         preferred-size-fn #(-> p (sc/select %) (sc/config :preferred-size))
         maximum-size-fn #(-> p (sc/select %) (sc/config! :maximum-size (preferred-size-fn %)))]
     (dorun (map #(maximum-size-fn [%]) [:#name :#first-move :#second-move :#number-turns]))
+    (swap! panel-map assoc :basic-parameters p)
     p))
 
 ; CJWizard has a bug where it reaches into the JSpinner, extracts the low-level
@@ -135,6 +143,7 @@
                       (sc/horizontal-panel :items (create-direction-radio-buttons))
                       [:fill-v 5]
                       (sc/scrollable t)]})]
+    (swap! panel-map assoc :map-configuration p)
     p))
 
 (defn- second-move-initial-setup-page [name]
@@ -143,6 +152,42 @@
     (proxy [WizardPage seesaw.selector.Tag] [title tip]
       (tag_name [] (.getSimpleName WizardPage)))))
 
+(defn- build-id [key side]
+  (keyword (str key side)))
+
+(defn- build-pound-id [key side]
+  (keyword (str "#" key side)))
+
+(defn- build-unique-id [side]
+  (build-id "unique-id" side))
+
+(defn- build-unique-pound-id [side]
+  (build-pound-id "unique-id" side))
+
+(defn- build-position-id [side]
+  (build-id "position-id" side))
+
+(defn- build-position-pound-id [side]
+  (build-pound-id "position-id" side))
+
+(defn- build-oob-side-id [side]
+  (build-id "oob-side-id" side))
+
+(defn- build-oob-side-pound-id [side]
+  (build-pound-id "oob-side-id" side))
+
+(defn- build-add-to-oob-id [side]
+  (build-id "add-to-oob" side))
+
+(defn- build-add-to-oob-pound-id [side]
+  (build-pound-id "add-to-oob" side))
+
+(defn- build-remove-last-from-oob-id [side]
+  (build-id "remove-last-from-oob" side))
+
+(defn- build-remove-last-from-oob-pound-id [side]
+  (build-pound-id "remove-last-from-oob" side))
+
 (defn- add-to-oob-enabled? [unique-pound-id position-pound-id e]
   (let [r (sc/to-root e)
         s1 (-> r (sc/select [unique-pound-id]) sc/text)
@@ -150,47 +195,50 @@
     (and (-> s1 str/blank? not)
          (-> s2 str/blank? not))))
 
-(defn- configure-add-to-oob-enabled-state [unique-pound-id position-pound-id e]
-  (let [r (sc/to-root e)
-        add-to-oob (sc/select r [:#add-to-oob])]
-    (sc/config! add-to-oob :enabled? (add-to-oob-enabled? unique-pound-id position-pound-id e))))
+(defn- configure-add-to-oob-enabled-state [side t]
+  (let [r (sc/to-root t)
+        add-to-oob (sc/select r [(build-add-to-oob-pound-id side)])]
+    (sc/config! add-to-oob :enabled? (add-to-oob-enabled? (build-unique-pound-id side) (build-position-pound-id side) t))))
 
-(defn- add-to-oob-action [unique-pound-id position-pound-id oob-pound-id e]
-  (let [r (sc/to-root e)
-        unique-id (sc/select r [unique-pound-id])
-        position (sc/select r [position-pound-id])
-        remove-last-from-oob (sc/select r [:#remove-last-from-oob])
-        t (sc/select r [oob-pound-id])]
+(defn- add-to-oob-action [side p _]
+  (let [unique-id (sc/select p [(build-unique-pound-id side)])
+        position (sc/select p [(build-position-pound-id side)])
+        remove-last-from-oob (sc/select p [(build-remove-last-from-oob-pound-id side)])
+        t (sc/select p [(build-oob-side-pound-id side)])]
     (table/insert-at! t (table/row-count t) {:unique-id (sc/text unique-id) :position (sc/text position)})
     (sc/config! remove-last-from-oob :enabled? true)
     (sc/text! unique-id "")
     (sc/text! position "")))
 
-(defn- remove-from-oob-action [oob-pound-id e]
-  (let [r (sc/to-root e)
-        remove-last-from-oob (sc/select r [:#remove-last-from-oob])
-        t (sc/select r [oob-pound-id])]
+(defn- remove-from-oob-action [side p _]
+  (let [remove-last-from-oob (sc/select p [(build-remove-last-from-oob-pound-id side)])
+        t (sc/select p [(build-oob-side-pound-id side)])]
     (table/remove-at! t (- (table/row-count t) 1))
     (sc/config! remove-last-from-oob :enabled? (< 0 (table/row-count t)))))
 
-(defn- initial-setup-layout [unique-id unique-pound-id position-id position-pound-id oob-id oob-pound-id]
-  (let [t (sc/table :id oob-id :model [:columns [:unique-id :position]])
-        unique-id (sc/text :id unique-id :listen [:document (fn [_] (configure-add-to-oob-enabled-state unique-pound-id position-pound-id t))])
-        position (sc/text :id position-id :listen [:document (fn [_] (configure-add-to-oob-enabled-state unique-pound-id position-pound-id t))])]
-    {:border 5
-     :items  [(sc/horizontal-panel :items ["Unique ID: " unique-id [:fill-h 10] "Position: " position])
-              [:fill-v 5]
-              (sc/horizontal-panel :items [(sc/button :id :add-to-oob :text "Add to OoB" :listen [:action (partial add-to-oob-action unique-pound-id position-pound-id oob-pound-id)])
-                                           :fill-h
-                                           (sc/button :id :remove-last-from-oob :text "Remove last from OoB" :enabled? false :listen [:action (partial remove-from-oob-action oob-pound-id)])])
-              [:fill-v 5]
-              (sc/scrollable t)]}))
+(defn- initial-setup-layout [side]
+  (let [t (sc/table :id (build-oob-side-id side) :model [:columns [:unique-id :position]])
+        unique-id-text (sc/text :id (build-unique-id side) :listen [:document (fn [_] (configure-add-to-oob-enabled-state side t))])
+        position-text (sc/text :id (build-position-id side) :listen [:document (fn [_] (configure-add-to-oob-enabled-state side t))])
+        add-to-oob-button (sc/button :id (build-add-to-oob-id side) :text "Add to OoB")
+        remove-last-from-oob-button (sc/button :id (build-remove-last-from-oob-id side) :text "Remove last from OoB" :enabled? false)
+        layout {:border 5
+                :items  [(sc/horizontal-panel :items ["Unique ID: " unique-id-text [:fill-h 10] "Position: " position-text])
+                         [:fill-v 5]
+                         (sc/horizontal-panel :items [add-to-oob-button :fill-h remove-last-from-oob-button])
+                         [:fill-v 5]
+                         (sc/scrollable t)]}]
+    {:add-to-oob-button add-to-oob-button :remove-last-from-oob-button remove-last-from-oob-button :layout layout}))
 
 (defn- second-move-initial-setup-panel [name]
-  (let [p (sc/abstract-panel
+  (let [{:keys [add-to-oob-button remove-last-from-oob-button layout]} (initial-setup-layout "2")
+        p (sc/abstract-panel
             (second-move-initial-setup-page name)
             (layout/box-layout :vertical)
-            (initial-setup-layout :unique-id2 :#unique-id2 :position-id2 :#position-id2 :oob-side2 :#oob-side2))]
+            layout)]
+    (sc/listen add-to-oob-button :action (partial add-to-oob-action "2" p))
+    (sc/listen remove-last-from-oob-button :action (partial remove-from-oob-action "2" p))
+    (swap! panel-map assoc :side-2 p)
     p))
 
 (defn- first-move-initial-setup-page [name]
@@ -205,10 +253,14 @@
           (.setNextEnabled false))))))
 
 (defn- first-move-initial-setup-panel [name]
-  (let [p (sc/abstract-panel
+  (let [{:keys [add-to-oob-button remove-last-from-oob-button layout]} (initial-setup-layout "1")
+        p (sc/abstract-panel
             (first-move-initial-setup-page name)
             (layout/box-layout :vertical)
-            (initial-setup-layout :unique-id1 :#unique-id1 :position-id1 :#position-id1 :oob-side1 :#oob-side1))]
+            layout)]
+    (sc/listen add-to-oob-button :action (partial add-to-oob-action "1" p))
+    (sc/listen remove-last-from-oob-button :action (partial remove-from-oob-action "1" p))
+    (swap! panel-map assoc :side-1 p)
     p))
 
 (def new-wizard-page-factory
@@ -221,35 +273,43 @@
               (= 2 c) (second-move-initial-setup-panel (-> (.get wizard-pages 0) (sc/select [:#second-move]) sc/selection))
               (= 3 c) (first-move-initial-setup-panel (-> (.get wizard-pages 0) (sc/select [:#first-move]) sc/selection)))))))
 
-(defn extract-orientation [d]
-  (let [r (sc/to-root d)]
-    (if (sc/selection (sc/select r [:#vertical-orientation])) "Vertical" "Horizontal")))
+(defn extract-basic-parameters [_]
+  (let [p (:basic-parameters @panel-map)
+        name (sc/text (sc/select p [:#name]))
+        fm (sc/text (sc/select p [:#first-move]))
+        sm (sc/text (sc/select p [:#second-move]))
+        nt (sc/selection (sc/select p [:#number-turns]))
+        em? (sc/selection (sc/select p [:#extra-move?]))]
+    {:name name :fm fm :sm sm :nt nt :em? em?}))
 
-(defn extract-direction [d]
-  (let [r (sc/to-root d)]
-    (cond (sc/selection (sc/select r [:#up-direction])) "up"
-          (sc/selection (sc/select r [:#right-direction])) "right"
-          (sc/selection (sc/select r [:#down-direction])) "down"
+(defn extract-orientation [_]
+  (let [p (:map-configuration @panel-map)]
+    (if (sc/selection (sc/select p [:#vertical-orientation])) "Vertical" "Horizontal")))
+
+(defn extract-direction [_]
+  (let [p (:map-configuration @panel-map)]
+    (cond (sc/selection (sc/select p [:#up-direction])) "up"
+          (sc/selection (sc/select p [:#right-direction])) "right"
+          (sc/selection (sc/select p [:#down-direction])) "down"
           :else "left")))
 
-(defn extract-map-rows-from-wizard [d]
-  (let [r (sc/to-root d)
-        t (sc/select r [:#map-table])
-        number-columns (-> r (sc/select [:#number-columns]) sc/selection)
+(defn extract-map-rows-from-wizard [_]
+  (let [p (:map-configuration @panel-map)
+        t (sc/select p [:#map-table])
+        number-columns (-> p (sc/select [:#number-columns]) sc/selection)
         tm (sc/config t :model)
         c (.getColumnCount tm)
         the-maps (for [i (range (.getRowCount tm))]
                    (map #(.getValueAt tm i %) (range 2 c)))]
     (partition number-columns the-maps)))
 
-(defn- extract-initial-setup [d oob-id]
-  (let [r (sc/to-root d)
-        t (sc/select r [oob-id])]
+(defn- extract-initial-setup [p side]
+  (let [t (sc/select p [(build-oob-side-pound-id side)])]
     (vec (for [i (range (table/row-count t))]
            (vec (vals (table/value-at t i)))))))
 
-(defn extract-side2-initial-setup [d]
-  (extract-initial-setup d :#oob-side2))
+(defn extract-side2-initial-setup [_]
+  (extract-initial-setup (:side-2 @panel-map) "2"))
 
-(defn extract-side1-initial-setup [d]
-  (extract-initial-setup d :#oob-side1))
+(defn extract-side1-initial-setup [_]
+  (extract-initial-setup (:side-1 @panel-map) "1"))
