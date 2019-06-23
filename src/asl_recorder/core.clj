@@ -597,10 +597,10 @@
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
     (sc/config! (sc/select r [:#firepower])
-                :enabled? ((complement not-any?) #{action-option-text} ["Defensive First Fire (To Hit)" "Defensive First Fire (IFT)" "Subsequent First Fire" "Final Protective Fire" "Intensive Fire (To Hit)" "Intensive Fire (IFT)" "Residual FP"
-                                                                        "Prep Fire (To Hit)" "Prep Fire (IFT)"
-                                                                        "Final Fire (To Hit)" "Final Fire (IFT)"
-                                                                        "Advancing Fire (To Hit)" "Advancing Fire (IFT)"
+                :enabled? ((complement not-any?) #{action-option-text} ["Defensive First Fire (IFT)" "Subsequent First Fire" "Final Protective Fire" "Intensive Fire (To Hit)" "Intensive Fire (IFT)" "Residual FP"
+                                                                        "Prep Fire (IFT)"
+                                                                        "Final Fire (IFT)"
+                                                                        "Advancing Fire (IFT)"
                                                                         "SW Survival" "Other"]))))
 
 (defn- activate-final-modifier-during-fire-phase [e]
@@ -640,14 +640,16 @@
                       (some #{action-option-text} ["CX" "Drop SW" "Destroy SW"]) description-text?
                       (some #{action-option-text} ["Place Smoke" "Recover SW"])
                       (and description-text? white-die-selected? movement-factors-text? final-modifier-text? result-text?)
-                      (some #{action-option-text} ["Defensive First Fire (To Hit)" "Defensive First Fire (IFT)"
+                      (some #{action-option-text} ["Defensive First Fire (IFT)"
                                                    "Subsequent First Fire" "Final Protective Fire"
-                                                   "Intensive Fire (To Hit)" "Intensive Fire (IFT)"
+                                                   "Intensive Fire (IFT)"
                                                    "Residual FP"
-                                                   "Prep Fire (To Hit)" "Prep Fire (IFT)"
-                                                   "Final Fire (To Hit)" "Final Fire (IFT)"
-                                                   "Advancing Fire (To Hit)" "Advancing Fire (IFT)"])
+                                                   "Prep Fire (IFT)"
+                                                   "Final Fire (IFT)"
+                                                   "Advancing Fire (IFT)"])
                       (and description-text? white-die-selected? colored-die-selected? firepower-text? final-modifier-text? result-text?)
+                      (some #{action-option-text} ["Defensive First Fire (To Hit)" "Intensive Fire (To Hit)" "Prep Fire (To Hit)" "Final Fire (To Hit)" "Advancing Fire (To Hit)"])
+                      (and description-text? white-die-selected? colored-die-selected? final-modifier-text? result-text?)
                       (some #{action-option-text} ["Morale Check" "Pin Task Check" "Leader Loss Morale Check" "Leader Loss Task Check"])
                       (and description-text? white-die-selected? colored-die-selected? final-modifier-text? result-text?)
                       (= action-option-text "Wound Resolution") (and description-text? white-die-selected? final-modifier-text? result-text?)
