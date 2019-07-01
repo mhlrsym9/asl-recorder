@@ -67,6 +67,12 @@
 (def rout-phase-map {"ATTACKER Rout" {:next-sub-phase "DEFENDER Rout" :transition-fn #'transition-to-defender-rout :open-file-fn #'transition-to-attacker-rout}
                      "DEFENDER Rout" {:next-sub-phase nil :transition-fn #'transition-to-advance :open-file-fn #'transition-to-defender-rout}})
 
+(defn create-initial-setup-xml [id initial-setup]
+  (xml/element id {} (doall (for [[unique-id position covered-arc] initial-setup]
+                              (xml/element :setup (merge {:unique-id unique-id :position position}
+                                                         (when-not (str/blank? covered-arc)
+                                                           {:covered-arc covered-arc})))))))
+
 (defn create-game-start-xml [name side1 side2 number-turns additional-half-turn orientation direction map-rows side2-initial-setup side1-initial-setup]
   (xml/element :game {}
                (xml/element :scenario {:name name :number-full-turns number-turns :additional-half-turn additional-half-turn :side1 side1 :side2 side2}
@@ -82,12 +88,8 @@
                                                                                                                      :upper-right upper-right
                                                                                                                      :lower-left  lower-left
                                                                                                                      :lower-right lower-right})))))))))
-                            (xml/element :side2-initial-setup {}
-                                         (doall (for [[unique-id position] side2-initial-setup]
-                                                  (xml/element :setup {:unique-id unique-id :position position}))))
-                            (xml/element :side1-initial-setup {}
-                                         (doall (for [[unique-id position] side1-initial-setup]
-                                                  (xml/element :setup {:unique-id unique-id :position position})))))
+                            (create-initial-setup-xml :side2-initial-setup side2-initial-setup)
+                            (create-initial-setup-xml :side1-initial-setup side1-initial-setup))
                (xml/element :turns {}
                             (xml/element :turn {:number 1}
                                          (xml/element :side {:attacker side1}
@@ -637,7 +639,7 @@
         final-modifier-text? (-> r (sc/select [:#final-modifier]) sc/selection)
         result-text? (-> r (sc/select [:#result]) sc/text string/blank? not)
         enable? (cond (some #{action-option-text} ["Movement" "Assault Movement"]) (and description-text? movement-factors-text?)
-                      (some #{action-option-text} ["CX" "Drop SW" "Destroy SW"]) description-text?
+                      (some #{action-option-text} ["CX" "Drop SW" "Destroy SW" "Change CA"]) description-text?
                       (some #{action-option-text} ["Place Smoke" "Recover SW"])
                       (and description-text? white-die-selected? movement-factors-text? final-modifier-text? result-text?)
                       (some #{action-option-text} ["Defensive First Fire (IFT)"
@@ -936,7 +938,7 @@
   (-> e
       switch-sub-phase-panel-visibility
       (update-sub-phase-panel "" false false)
-      (establish-action-options ["Prep Fire (To Hit)" "Prep Fire (IFT)" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Other"])
+      (establish-action-options ["Prep Fire (To Hit)" "Prep Fire (IFT)" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Change CA" "Other"])
       reset-event-panel))
 
 (defn- transition-to-movement [e]
@@ -950,12 +952,12 @@
 
 (defn- transition-to-defensive-fire [e]
   (-> e
-      (establish-action-options ["Final Fire (To Hit)" "Final Fire (IFT)" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Other"])
+      (establish-action-options ["Final Fire (To Hit)" "Final Fire (IFT)" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Change CA" "Other"])
       reset-event-panel))
 
 (defn- transition-to-advancing-fire [e]
   (-> e
-      (establish-action-options ["Advancing Fire (To Hit)" "Advancing Fire (IFT)" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Other"])
+      (establish-action-options ["Advancing Fire (To Hit)" "Advancing Fire (IFT)" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Change CA" "Other"])
       reset-event-panel))
 
 (defn- transition-to-rout [e]

@@ -170,6 +170,12 @@
 (defn- build-position-pound-id [side]
   (build-pound-id "position-id" side))
 
+(defn- build-covered-arc-id [side]
+  (build-id "covered-arc-id" side))
+
+(defn- build-covered-arc-pound-id [side]
+  (build-pound-id "covered-arc-id" side))
+
 (defn- build-oob-side-id [side]
   (build-id "oob-side-id" side))
 
@@ -203,12 +209,14 @@
 (defn- add-to-oob-action [side p _]
   (let [unique-id (sc/select p [(build-unique-pound-id side)])
         position (sc/select p [(build-position-pound-id side)])
+        covered-arc (sc/select p [(build-covered-arc-pound-id side)])
         remove-last-from-oob (sc/select p [(build-remove-last-from-oob-pound-id side)])
         t (sc/select p [(build-oob-side-pound-id side)])]
-    (table/insert-at! t (table/row-count t) {:unique-id (sc/text unique-id) :position (sc/text position)})
+    (table/insert-at! t (table/row-count t) {:unique-id (sc/text unique-id) :position (sc/text position) :covered-arc (sc/text covered-arc)})
     (sc/config! remove-last-from-oob :enabled? true)
     (sc/text! unique-id "")
-    (sc/text! position "")))
+    (sc/text! position "")
+    (sc/text! covered-arc "")))
 
 (defn- remove-from-oob-action [side p _]
   (let [remove-last-from-oob (sc/select p [(build-remove-last-from-oob-pound-id side)])
@@ -217,13 +225,14 @@
     (sc/config! remove-last-from-oob :enabled? (< 0 (table/row-count t)))))
 
 (defn- initial-setup-layout [side]
-  (let [t (sc/table :id (build-oob-side-id side) :model [:columns [:unique-id :position]])
+  (let [t (sc/table :id (build-oob-side-id side) :model [:columns [:unique-id :position :covered-arc]])
         unique-id-text (sc/text :id (build-unique-id side) :listen [:document (fn [_] (configure-add-to-oob-enabled-state side t))])
         position-text (sc/text :id (build-position-id side) :listen [:document (fn [_] (configure-add-to-oob-enabled-state side t))])
+        covered-arc-text (sc/text :id (build-covered-arc-id side) :listen [:document (fn [_] (configure-add-to-oob-enabled-state side t))])
         add-to-oob-button (sc/button :id (build-add-to-oob-id side) :text "Add to OoB")
         remove-last-from-oob-button (sc/button :id (build-remove-last-from-oob-id side) :text "Remove last from OoB" :enabled? false)
         layout {:border 5
-                :items  [(sc/horizontal-panel :items ["Unique ID: " unique-id-text [:fill-h 10] "Position: " position-text])
+                :items  [(sc/horizontal-panel :items ["Unique ID: " unique-id-text [:fill-h 10] "Position: " position-text [:fill-h 10] "Covered Arc (CA): " covered-arc-text])
                          [:fill-v 5]
                          (sc/horizontal-panel :items [add-to-oob-button :fill-h remove-last-from-oob-button])
                          [:fill-v 5]
