@@ -215,7 +215,7 @@
     (sc/text! attacker the-attacker)
     (sc/text! phase the-phase)))
 
-(defn append-event [loc {:keys [sub-phase action-option description movement-factors movement-points firepower die-rolls final-modifier attacker-final-modifier defender-final-modifier result]}]
+(defn append-event [loc {:keys [sub-phase action-option description movement-factors movement-points firepower target-type-option to-hit die-rolls final-modifier attacker-final-modifier defender-final-modifier result]}]
   (let [n (zip/node loc)
         c (conj (vec (:content n)) (xml/element :event (merge {:action action-option} (when sub-phase {:sub-phase sub-phase}))
                                                 (when description
@@ -226,6 +226,10 @@
                                                   (xml/element :movement-points {} movement-points))
                                                 (when firepower
                                                   (xml/element :firepower {} firepower))
+                                                (when target-type-option
+                                                  (xml/element :target-type {} target-type-option))
+                                                (when to-hit
+                                                  (xml/element :to-hit {} to-hit))
                                                 (when (seq die-rolls)
                                                   (xml/element :die-rolls {} (map #(xml/element :die-roll
                                                                                                 {:color (:color %)}
@@ -496,14 +500,16 @@
     (update-random-dice e :label-id-select false random-dice-info)
     (update-random-dice e :panel-id-select false random-dice-info)))
 
+(defn- deactivate-ui-elements [e ui-elements]
+  (let [r (sc/to-root e)]
+    (dorun (map #(sc/config! (sc/select r [%]) :enabled? false) ui-elements))))
+
 (defn- deactivate-standard-event-panel [e]
   (let [r (sc/to-root e)]
     (sc/hide! (sc/select r [:#standard-event-panel]))
     (disable-die-radio-buttons (sc/select r [:#white-die-panel]))
     (disable-die-radio-buttons (sc/select r [:#colored-die-panel]))
-    (sc/config! (sc/select r [:#movement-factors]) :enabled? false)
-    (sc/config! (sc/select r [:#movement-points]) :enabled? false)
-    (sc/config! (sc/select r [:#firepower]) :enabled? false)))
+    (deactivate-ui-elements e [:#movement-factors :#movement-points :#firepower :#target-type-options :#to-hit])))
 
 (defn- deactivate-final-modifier-panel [e]
   (let [r (sc/to-root e)]
@@ -513,19 +519,16 @@
 (defn- deactivate-split-final-modifier-panel [e]
   (let [r (sc/to-root e)]
     (sc/hide! (sc/select r [:#split-final-modifier-panel]))
-    (sc/config! (sc/select r [:#attacker-final-modifier]) :enabled? false)
-    (sc/config! (sc/select r [:#defender-final-modifier]) :enabled? false)))
+    (deactivate-ui-elements e [:#attacker-final-modifier :#defender-final-modifier])))
 
 (defn- perform-rally-phase-activations [e]
   (let [r (sc/to-root e)]
     (sc/config! (-> r (sc/select [:#description])) :enabled? true)
     (deactivate-random-event-panel e)
     (sc/show! (sc/select r [:#standard-event-panel]))
+    (deactivate-ui-elements e [:#movement-factors :#movement-points :#firepower :#target-type-options :#to-hit])
     (activate-white-die-during-rally-phase e)
     (activate-colored-die-during-rally-phase e)
-    (sc/config! (sc/select r [:#movement-factors]) :enabled? false)
-    (sc/config! (sc/select r [:#movement-points]) :enabled? false)
-    (sc/config! (sc/select r [:#firepower]) :enabled? false)
     (deactivate-split-final-modifier-panel e)
     (sc/show! (sc/select r [:#final-modifier-panel]))
     (activate-final-modifier-during-rally-phase e)
@@ -589,21 +592,36 @@
                          "Morale Check" "Pin Task Check" "Leader Loss Morale Check" "Leader Loss Task Check" "Other"]
                       :#colored-die-panel))
 
-(defn- activate-movement-factors-during-fire-phase [e]
+(defn- activate-ui-element-during-fire-phase [e ui-id actions-for-activation]
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
-    (sc/config! (sc/select r [:#movement-factors])
-                :enabled? ((complement not-any?) #{action-option-text} ["Movement" "Assault Movement" "Place Smoke" "Recover SW" "Other"]))))
+    (sc/config! (sc/select r [ui-id])
+                :enabled? ((complement not-any?) #{action-option-text} actions-for-activation))))
+
+(defn- activate-movement-factors-during-fire-phase [e]
+  (activate-ui-element-during-fire-phase e :#movement-factors ["Movement" "Assault Movement" "Place Smoke" "Recover SW" "Other"]))
+
+(defn- activate-movement-points-during-fire-phase [e]
+  (activate-ui-element-during-fire-phase e :#movement-points []))
 
 (defn- activate-firepower-during-fire-phase [e]
-  (let [r (sc/to-root e)
-        action-option-text (-> r (sc/select [:#action-options]) sc/selection)]
-    (sc/config! (sc/select r [:#firepower])
-                :enabled? ((complement not-any?) #{action-option-text} ["Defensive First Fire (IFT)" "Subsequent First Fire" "Final Protective Fire" "Intensive Fire (To Hit)" "Intensive Fire (IFT)" "Residual FP"
-                                                                        "Prep Fire (IFT)"
-                                                                        "Final Fire (IFT)"
-                                                                        "Advancing Fire (IFT)"
-                                                                        "SW Survival" "Other"]))))
+  (activate-ui-element-during-fire-phase e :#firepower ["Defensive First Fire (IFT)" "Subsequent First Fire" "Final Protective Fire" "Intensive Fire (IFT)" "Residual FP"
+                                                        "Prep Fire (IFT)"
+                                                        "Final Fire (IFT)"
+                                                        "Advancing Fire (IFT)"
+                                                        "SW Survival" "Other"]))
+
+(defn- activate-target-type-options-during-fire-phase [e]
+  (activate-ui-element-during-fire-phase e :#target-type-options ["Defensive First Fire (To Hit)" "Intensive Fire (To Hit)"
+                                                                  "Prep Fire (To Hit)"
+                                                                  "Final Fire (To Hit)"
+                                                                  "Advancing Fire (To Hit)"]))
+
+(defn- activate-to-hit-during-fire-phase [e]
+  (activate-ui-element-during-fire-phase e :#to-hit ["Defensive First Fire (To Hit)" "Intensive Fire (To Hit)"
+                                                     "Prep Fire (To Hit)"
+                                                     "Final Fire (To Hit)"
+                                                     "Advancing Fire (To Hit)"]))
 
 (defn- activate-final-modifier-during-fire-phase [e]
   (let [r (sc/to-root e)
@@ -636,6 +654,8 @@
         colored-die-selected? (-> r (sc/select [:#colored-die-panel]) selected-die-radio-button?)
         movement-factors-text? (-> r (sc/select [:#movement-factors]) sc/text string/blank? not)
         firepower-text? (-> r (sc/select [:#firepower]) sc/text string/blank? not)
+        target-type-option-text? (-> r (sc/select [:#target-type-options]) sc/selection string/blank? not)
+        to-hit-text? (-> r (sc/select [:#to-hit]) sc/text string/blank? not)
         final-modifier-text? (-> r (sc/select [:#final-modifier]) sc/selection)
         result-text? (-> r (sc/select [:#result]) sc/text string/blank? not)
         enable? (cond (some #{action-option-text} ["Movement" "Assault Movement"]) (and description-text? movement-factors-text?)
@@ -651,7 +671,7 @@
                                                    "Advancing Fire (IFT)"])
                       (and description-text? white-die-selected? colored-die-selected? firepower-text? final-modifier-text? result-text?)
                       (some #{action-option-text} ["Defensive First Fire (To Hit)" "Intensive Fire (To Hit)" "Prep Fire (To Hit)" "Final Fire (To Hit)" "Advancing Fire (To Hit)"])
-                      (and description-text? white-die-selected? colored-die-selected? final-modifier-text? result-text?)
+                      (and description-text? white-die-selected? colored-die-selected? target-type-option-text? to-hit-text? final-modifier-text? result-text?)
                       (some #{action-option-text} ["Morale Check" "Pin Task Check" "Leader Loss Morale Check" "Leader Loss Task Check"])
                       (and description-text? white-die-selected? colored-die-selected? final-modifier-text? result-text?)
                       (= action-option-text "Wound Resolution") (and description-text? white-die-selected? final-modifier-text? result-text?)
@@ -668,8 +688,10 @@
     (activate-white-die-during-fire-phase e)
     (activate-colored-die-during-fire-phase e)
     (activate-movement-factors-during-fire-phase e)
-    (sc/config! (sc/select r [:#movement-points]) :enabled? false)
+    (activate-movement-points-during-fire-phase e)
     (activate-firepower-during-fire-phase e)
+    (activate-target-type-options-during-fire-phase e)
+    (activate-to-hit-during-fire-phase e)
     (deactivate-split-final-modifier-panel e)
     (sc/show! (sc/select r [:#final-modifier-panel]))
     (activate-final-modifier-during-fire-phase e)
@@ -732,8 +754,7 @@
     (activate-white-die-during-rout-phase e)
     (activate-colored-die-during-rout-phase e)
     (activate-movement-factors-during-rout-phase e)
-    (sc/config! (sc/select r [:#movement-points]) :enabled? false)
-    (sc/config! (sc/select r [:#firepower]) :enabled? false)
+    (deactivate-ui-elements e [:#movement-points :#firepower :#target-type-options :#to-hit])
     (deactivate-split-final-modifier-panel e)
     (sc/show! (sc/select r [:#final-modifier-panel]))
     (activate-final-modifier-during-rout-phase e)
@@ -764,9 +785,7 @@
     (sc/show! (sc/select r [:#standard-event-panel]))
     (disable-die-radio-buttons (sc/select r [:#white-die-panel]))
     (disable-die-radio-buttons (sc/select r [:#colored-die-panel]))
-    (sc/config! (sc/select r [:#movement-factors]) :enabled? false)
-    (sc/config! (sc/select r [:#movement-points]) :enabled? false)
-    (sc/config! (sc/select r [:#firepower]) :enabled? false)
+    (deactivate-ui-elements e [:#movement-factors :#movement-points :#firepower :#target-type-options :#to-hit])
     (deactivate-split-final-modifier-panel e)
     (sc/show! (sc/select r [:#final-modifier-panel]))
     (sc/config! (sc/select r [:#final-modifier]) :enabled? false)
@@ -818,9 +837,7 @@
     (sc/show! (sc/select r [:#standard-event-panel]))
     (activate-white-die-during-close-combat-phase e)
     (activate-colored-die-during-close-combat-phase e)
-    (sc/config! (sc/select r [:#movement-factors]) :enabled? false)
-    (sc/config! (sc/select r [:#movement-points]) :enabled? false)
-    (sc/config! (sc/select r [:#firepower]) :enabled? false)
+    (deactivate-ui-elements e [:#movement-factors :#movement-points :#firepower :#target-type-options :#to-hit])
     (sc/config! (sc/select r [:#split-final-modifier-panel]) :visible? (= "Ambush" action-option-text))
     (sc/config! (sc/select r [:#final-modifier-panel]) :visible? (not= "Ambush" action-option-text))
     (activate-final-modifiers-during-close-combat-phase e)
@@ -844,7 +861,7 @@
   (let [r (sc/to-root e)
         event-panel (sc/select r [:#event-panel])
         {:keys [action-options description previous-description number-dice white-die-panel colored-die-panel
-                movement-factors movement-points firepower
+                movement-factors movement-points firepower target-type-options to-hit
                 final-modifier attacker-final-modifier defender-final-modifier result]} (sc/group-by-id event-panel)
         select-die-panel (fn [v] (sc/select r v))
         the-previous-description (get-previous-description)]
@@ -857,6 +874,8 @@
     (sc/text! movement-factors "")
     (sc/text! movement-points "")
     (sc/text! firepower "")
+    (sc/selection! target-type-options 0)
+    (sc/text! to-hit "")
     (sc/selection! final-modifier 0)
     (sc/selection! attacker-final-modifier 0)
     (sc/selection! defender-final-modifier 0)
@@ -938,7 +957,9 @@
   (-> e
       switch-sub-phase-panel-visibility
       (update-sub-phase-panel "" false false)
-      (establish-action-options ["Prep Fire (To Hit)" "Prep Fire (IFT)" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Change CA" "Other"])
+      (establish-action-options ["Prep Fire (To Hit)" "Prep Fire (IFT)"
+                                 "Intensive Fire (To Hit)" "Intensive Fire (IFT)"
+                                 "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Change CA" "Other"])
       reset-event-panel))
 
 (defn- transition-to-movement [e]
@@ -952,12 +973,16 @@
 
 (defn- transition-to-defensive-fire [e]
   (-> e
-      (establish-action-options ["Final Fire (To Hit)" "Final Fire (IFT)" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Change CA" "Other"])
+      (establish-action-options ["Final Fire (To Hit)" "Final Fire (IFT)"
+                                 "Intensive Fire (To Hit)" "Intensive Fire (IFT)"
+                                 "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Destroy SW" "Change CA" "Other"])
       reset-event-panel))
 
 (defn- transition-to-advancing-fire [e]
   (-> e
-      (establish-action-options ["Advancing Fire (To Hit)" "Advancing Fire (IFT)" "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Change CA" "Other"])
+      (establish-action-options ["Advancing Fire (To Hit)" "Advancing Fire (IFT)"
+                                 "Intensive Fire (To Hit)" "Intensive Fire (IFT)"
+                                 "Morale Check" "Pin Task Check" "Wound Resolution" "Leader Loss Morale Check" "Leader Loss Task Check" "SW Survival" "Random Selection" "Change CA" "Other"])
       reset-event-panel))
 
 (defn- transition-to-rout [e]
@@ -1003,6 +1028,8 @@
         movement-factors-text (-> r (sc/select [:#movement-factors]) sc/text)
         movement-points-text (-> r (sc/select [:#movement-points]) sc/text)
         firepower-text (-> r (sc/select [:#firepower]) sc/text)
+        target-type-option-text (-> r (sc/select [:#target-type-options]) sc/selection)
+        to-hit-text (-> r (sc/select [:#to-hit]) sc/text)
         white-die-panel (-> r (sc/select [:#white-die-panel]))
         colored-die-panel (-> r (sc/select [:#colored-die-panel]))
         random-die-panels (map (fn [pid] (sc/select r [pid])) (map :panel-id-select random-dice-info))
@@ -1018,6 +1045,8 @@
                           (when (not-blank-fn? movement-factors-text) {:movement-factors movement-factors-text})
                           (when (not-blank-fn? movement-points-text) {:movement-points movement-points-text})
                           (when (not-blank-fn? firepower-text) {:firepower firepower-text})
+                          (when (not-blank-fn? target-type-option-text) {:target-type-option target-type-option-text})
+                          (when (not-blank-fn? to-hit-text) {:to-hit to-hit-text})
                           {:die-rolls die-rolls}
                           (when (sc/config final-modifier :enabled?) {:final-modifier (sc/selection final-modifier)})
                           (when (sc/config attacker-final-modifier :enabled?) {:attacker-final-modifier (sc/selection attacker-final-modifier)})
@@ -1251,6 +1280,12 @@
                         (sc/spinner :id :defender-final-modifier :model (sc/spinner-model 0 :from -10 :to 10 :by 1))
                         (sm/mig-panel :id :split-final-modifier-panel :visible? false :constraints ["insets 0" "[|fill, grow||fill, grow]" ""] :items [["ATTACKER Final Modifier:" "align right"] [attacker-final-modifier] ["DEFENDER Final Modifier:" "align right"] [defender-final-modifier "wrap"]])
 
+                        (sc/label :id :target-type-options-label :text "Target Type:" :halign :right)
+                        (sc/combobox :id :target-type-options :model ["" "Vehicular" "Infantry" "Area"])
+                        (sc/label :id :to-hit-label :text "To Hit:" :halign :right)
+                        (sc/text :id :to-hit :text "")
+                        (sm/mig-panel :id :to-hit-panel :constraints ["insets 0" "[|fill, grow]" ""] :items [[target-type-options-label] [target-type-options] [to-hit-label] [to-hit]])
+
                         (sc/label :id :movement-factors-label :text "MF:" :halign :right)
                         (sc/text :id :movement-factors :text "")
                         (sc/label :id :movement-points-label :text "MP:" :halign :right)
@@ -1266,6 +1301,7 @@
                                       :items (:radio-buttons colored-die-info)
                                       :user-data {:color colored :button-group (:button-group colored-die-info)})
                         (sm/mig-panel :id :standard-event-panel :constraints ["" "[|fill, grow]" ""] :items [[movement-factors-label "grow"] [movement-factors] [movement-points-label] [movement-points] [firepower-label] [firepower "wrap"]
+                                                                                                             [to-hit-panel "span, wrap, grow"]
                                                                                                              ["White Die:" "align right"] [white-die-panel "span, wrap"]
                                                                                                              ["Colored Die:" "align right"] [colored-die-panel "span, wrap"]
                                                                                                              [final-modifier-panel "hidemode 3, span, wrap, grow"]
@@ -1326,6 +1362,8 @@
                          (sc/listen movement-factors :document (fn [_] (perform-activations movement-factors)))
                          (sc/listen movement-points :document (fn [_] (perform-activations movement-points)))
                          (sc/listen firepower :document (fn [_] (perform-activations firepower)))
+                         (sc/listen target-type-options :selection perform-activations)
+                         (sc/listen to-hit :document (fn [_] (perform-activations to-hit)))
                          (sc/listen result :document (fn [_] (perform-activations result)))
                          (sc/listen add-event-button :action add-event)
                          (sc/listen ok :action ok-fn)
