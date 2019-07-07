@@ -455,14 +455,14 @@
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/text)
         final-modifier (sc/select r [:#final-modifier])
-        enabled? ((complement not-any?) #{action-option-text} ["Recover SW" "Repair SW" "Self Rally" "Unit Rally" "Other"])]
+        enabled? ((complement not-any?) #{action-option-text} ["Recover SW" "Repair SW" "Self Rally" "Wound Resolution" "Leader Creation" "Unit Rally" "Other"])]
     (sc/config! final-modifier :enabled? enabled?)))
 
 (defn- activate-result-during-rally-phase [e]
   (let [r (sc/to-root e)
         action-option-text (-> r (sc/select [:#action-options]) sc/text)
         result (sc/select r [:#result])
-        enabled? ((complement not-any?) #{action-option-text} ["Recover SW" "Repair SW" "Self Rally" "Unit Rally" "Other"])]
+        enabled? ((complement not-any?) #{action-option-text} ["Recover SW" "Repair SW" "Self Rally" "Wound Resolution" "Leader Creation" "Unit Rally" "Other"])]
     (sc/config! result :enabled? enabled?)))
 
 (defn- activate-event-button-during-rally-phase [e]
@@ -472,16 +472,13 @@
         description-text? (-> r (sc/select [:#description]) sc/text string/blank? not)
         white-die-selected? (-> r (sc/select [:#white-die-panel]) selected-die-radio-button?)
         colored-die-selected? (-> r (sc/select [:#colored-die-panel]) selected-die-radio-button?)
-        final-modifier-text (-> r (sc/select [:#final-modifier]) sc/selection)
         result-text? (-> r (sc/select [:#result]) sc/text string/blank? not)
         enable? (cond (some #{action-option-text} ["Place Reinforcements" "Transfer SW"])
                       description-text?
-                      (some #{action-option-text} ["Recover SW" "Repair SW"])
-                      (and description-text? white-die-selected? final-modifier-text result-text?)
+                      (some #{action-option-text} ["Recover SW" "Repair SW" "Wound Resolution" "Leader Creation"])
+                      (and description-text? white-die-selected? result-text?)
                       (some #{action-option-text} ["Self Rally" "Unit Rally"])
                       (and description-text? white-die-selected? colored-die-selected? result-text?)
-                      (some #{action-option-text} ["Wound Resolution" "Leader Creation"])
-                      (and description-text? white-die-selected? result-text?)
                       (= "Other" action-option-text)
                       (or description-text? result-text?)
                       :else false)]
@@ -819,12 +816,11 @@
         description-text? (-> r (sc/select [:#description]) sc/text string/blank? not)
         white-die-selected? (-> r (sc/select [:#white-die-panel]) selected-die-radio-button?)
         colored-die-selected? (-> r (sc/select [:#colored-die-panel]) selected-die-radio-button?)
-        final-modifier-text? (-> r (sc/select [:#final-modifier]) sc/selection)
         result-text? (-> r (sc/select [:#result]) sc/text string/blank? not)
         enable? (cond (some #{action-option-text} ["Ambush" "ATTACKER CC" "DEFENDER CC"])
-                      (and description-text? white-die-selected? colored-die-selected? final-modifier-text? result-text?)
+                      (and description-text? white-die-selected? colored-die-selected? result-text?)
                       (= "Leader Creation" action-option-text)
-                      (and description-text? white-die-selected? final-modifier-text? result-text?)
+                      (and description-text? white-die-selected? result-text?)
                       (= "Other" action-option-text) (or description-text? result-text?)
                       :else false)]
     (sc/config! add-event-button :enabled? enable?)))
@@ -874,7 +870,7 @@
     (sc/text! movement-factors "")
     (sc/text! movement-points "")
     (sc/text! firepower "")
-    (sc/selection! target-type-options 0)
+    (sc/selection! target-type-options "")
     (sc/text! to-hit "")
     (sc/selection! final-modifier 0)
     (sc/selection! attacker-final-modifier 0)

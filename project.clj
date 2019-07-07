@@ -1,4 +1,4 @@
-(defproject asl-recorder "0.1.14-SNAPSHOT"
+(defproject asl-recorder "0.1.15-SNAPSHOT"
   :description "FIXME: write description"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
