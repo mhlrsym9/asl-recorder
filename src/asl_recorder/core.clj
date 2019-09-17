@@ -1123,7 +1123,7 @@
         sw (proxy [asl_recorder.swing_worker] []
              (doInBackground []
                (do
-                 (with-open [r (clojure.java.io/reader f)]
+                 (with-open [r (io/reader f)]
                    (let [loc (-> r
                                  xml/parse
                                  te/update-scenario-element

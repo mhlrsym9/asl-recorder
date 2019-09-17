@@ -1,0 +1,5 @@
+<Nationalities>
+    <Nationality name="German" subfolder="german"/>
+    <Nationality name="Russian" subfolder="russian"/>
+    <Nationality name="American" subfolder="american"/>
+</Nationalities>

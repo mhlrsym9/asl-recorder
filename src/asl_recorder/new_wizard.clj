@@ -1,10 +1,15 @@
 (ns asl-recorder.new-wizard
   (:require [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd] [layout :as layout] selector [table :as t]]
+            [clojure.data.xml :as xml]
+            [clojure.data.zip.xml :as zip-xml]
+            [clojure.java.io :as io]
             [clojure.string :as str]
+            [clojure.zip :as zip]
             [seesaw [table :as table] [mig :as sm]])
   (:import [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener WizardSettings]
-           (javax.swing JSpinner)
-           (javax.swing.table AbstractTableModel)))
+           (javax.swing JTable DefaultCellEditor)
+           (javax.swing.table TableColumnModel TableColumn)
+           (javax.swing.table AbstractTableModel DefaultTableCellRenderer)))
 
 ; TODO: Choose scenario from list... pre-fills basic-parameters and map-configuration.
 ; TODO: Different size maps (HASL, DASL, etc.)
@@ -27,29 +32,88 @@
 ; as each panel is created, the code adds a reference to the actual current panel into
 ; this stateful map (argh!). When the data is extracted, the code uses these references
 ; instead of the dialog root to extract the data in the last instance of each panel.
-(def ^{:private true} panel-map (atom {:basic-parameters nil :map-configuration nil :side-2 nil :side-1 nil}))
+(def ^{:private true} panel-map (atom {:basic-parameters nil :optional-rules nil :map-configuration nil :side-2 nil :side-1 nil}))
+
+(defn- extract-nationalities []
+  (with-open [r (-> "nationalities.xml" io/resource io/reader)]
+    (let [z (-> r xml/parse zip/xml-zip)]
+      (map (zip-xml/attr :name) (zip-xml/xml-> z :Nationality)))))
+
+(defn- create-rule-set-radio-buttons []
+  (let [the-button-group (sc/button-group)]
+    [:fill-h
+     "Rule Set:"
+     (sc/radio :id :asl :class :orientation-class :text "ASL" :group the-button-group :selected? true)
+     (sc/radio :id :asl-sk :class :orientation-class :text "ASL Starter Kit" :group the-button-group)
+     :fill-h]))
+
+(def ^{:private true} side-configuration-table-columns
+  [{:key :move-order :text "Move Order" :class java.lang.Integer}
+   {:key :is-nationality? :text "Is Side Single Nationality?" :class java.lang.Boolean}
+   {:key :nationality :text "Nationality" :class java.lang.String}
+   {:key :coalition :text "Coalition Name" :class java.lang.String}
+   {:key :extra-move? :text "Has Extra Move?" :class java.lang.Boolean}])
+
+(def side-data-row [false "" "" false])
 
 (defn- basic-parameters-panel []
-  (let [p (sc/abstract-panel
+  (let [nationalities (extract-nationalities)
+        nationality-combobox (sc/combobox :id :nationality :model nationalities)
+        create-side-rows (fn [idx]
+                           (into [] (concat (vector idx) side-data-row)))
+        t-model-data (atom (vec (map create-side-rows (range 1 3))))
+        t-model (proxy [AbstractTableModel] []
+                  (getRowCount [] (count @t-model-data))
+                  (getColumnCount [] (count side-configuration-table-columns))
+                  (getValueAt [r c] (nth (nth @t-model-data r) c))
+                  (isCellEditable [r c] (let [is-nationality? (nth (nth @t-model-data r) 1)]
+                                          (cond (= c 0) false
+                                                (= c 1) true
+                                                (= c 2) is-nationality?
+                                                (= c 3) (not is-nationality?)
+                                                (= c 4) true)))
+                  (getColumnName [c] (:text (nth side-configuration-table-columns c)))
+                  (getColumnClass [c] (:class (nth side-configuration-table-columns c)))
+                  (setValueAt [o r c]
+                    (let [row-data (assoc (nth @t-model-data r) c o)]
+                      (swap! t-model-data assoc r row-data))))
+        t (sc/table :id :side-table :model t-model)
+        update-table-fn (fn [e]
+                          (let [r (sc/to-root e)
+                                number-sides (-> r (sc/select [:#number-sides]) sc/selection)
+                                new-vec (vec (map create-side-rows (range 1 (inc number-sides))))]
+                            (reset! t-model-data new-vec)
+                            (.fireTableDataChanged t-model)))
+        p (sc/abstract-panel
             basic-parameters-page
             (layout/box-layout :vertical)
             {:border 5
              :items  [:fill-v
                       (sc/horizontal-panel :items ["Name: " (sc/text :id :name :columns 100)])
                       [:fill-v 5]
-                      (sc/horizontal-panel :items ["First Move: " (sc/combobox :id :first-move :model ["German" "Russian" "American"])])
-                      [:fill-v 5]
-                      (sc/horizontal-panel :items ["Other Side: " (sc/combobox :id :second-move :model ["German" "Russian" "American"])])
+                      (sc/horizontal-panel :items (create-rule-set-radio-buttons))
                       [:fill-v 5]
                       (sc/horizontal-panel :items ["Number Turns: " (sc/spinner :id :number-turns
                                                                                 :model (sc/spinner-model 1 :from 1 :to 15 :by 1))])
                       [:fill-v 5]
-                      (sc/horizontal-panel :items [(sc/checkbox :id :extra-move? :text "First Side has extra move?")])
+                      (sc/horizontal-panel :items ["Number of Sides: "
+                                                   (sc/spinner :id :number-sides
+                                                               :model (sc/spinner-model 2 :from 2 :to 4 :by 1)
+                                                               :listen [:change update-table-fn])])
+                      [:fill-v 5]
+                      (sc/scrollable t)
                       :fill-v]})
         preferred-size-fn #(-> p (sc/select %) (sc/config :preferred-size))
         maximum-size-fn #(-> p (sc/select %) (sc/config! :maximum-size (preferred-size-fn %)))]
-    (dorun (map #(maximum-size-fn [%]) [:#name :#first-move :#second-move :#number-turns]))
+    (dorun (map #(maximum-size-fn [%]) [:#name :#number-turns :#side-table]))
     (swap! panel-map assoc :basic-parameters p)
+    (let [column-model (.getColumnModel t)
+          column (.getColumn column-model 2)
+          default-cell-renderer (DefaultTableCellRenderer.)
+          default-cell-editor (DefaultCellEditor. nationality-combobox)]
+      (.setToolTipText default-cell-renderer "Click for combo box!")
+      (.setCellEditor column default-cell-editor)
+      (.setCellRenderer column default-cell-renderer))
     p))
 
 ; CJWizard has a bug where it reaches into the JSpinner, extracts the low-level
@@ -254,12 +318,7 @@
   (let [title (str name " Initial Setup")
         tip (str "Initial positions for all on-board " name " units.")]
     (proxy [WizardPage seesaw.selector.Tag] [title tip]
-      (tag_name [] (.getSimpleName WizardPage))
-      (rendering [path settings]
-        (proxy-super rendering path settings)
-        (doto this
-          (.setFinishEnabled true)
-          (.setNextEnabled false))))))
+      (tag_name [] (.getSimpleName WizardPage)))))
 
 (defn- first-move-initial-setup-panel [name]
   (let [{:keys [add-to-oob-button remove-last-from-oob-button layout]} (initial-setup-layout "1")
@@ -272,6 +331,35 @@
     (swap! panel-map assoc :side-1 p)
     p))
 
+(def ^{:private true} optional-rules-page
+  (proxy [WizardPage seesaw.selector.Tag] ["Optional Rules" "Choose the ASL optional rules in effect for this game."]
+    (tag_name [] (.getSimpleName WizardPage))
+    (rendering [path settings]
+      (proxy-super rendering path settings)
+      (doto this
+        (.setFinishEnabled true)
+        (.setNextEnabled false)))))
+
+(defn- optional-rules-panel []
+  (let [p (sc/abstract-panel
+            optional-rules-page
+            (layout/box-layout :vertical)
+            {:border 5
+             :items  [:fill-v
+                      (sc/horizontal-panel :items [(sc/checkbox :id :use-iift? :text "Use IIFT?")])
+                      [:fill-v 5]
+                      (sc/horizontal-panel :items [(sc/checkbox :id :use-battlefield-integrity? :text "Use Battlefield Integrity?")])
+                      :fill-v]})]
+    (swap! panel-map assoc :optional-rules p)
+    p))
+
+(defn- is-asl-selected? []
+  (let [p (:basic-parameters @panel-map)]
+    (sc/selection (sc/select p [:#asl]))))
+
+(defn- extract-rule-set []
+  (if (is-asl-selected?) "asl" "asl-sk"))
+
 (def new-wizard-page-factory
   (reify PageFactory
     (isTransient [_ _ _] false)
@@ -280,16 +368,24 @@
         (cond (= 0 c) (basic-parameters-panel)
               (= 1 c) (map-configuration-panel)
               (= 2 c) (second-move-initial-setup-panel (-> (.get wizard-pages 0) (sc/select [:#second-move]) sc/selection))
-              (= 3 c) (first-move-initial-setup-panel (-> (.get wizard-pages 0) (sc/select [:#first-move]) sc/selection)))))))
+              (= 3 c) (first-move-initial-setup-panel (-> (.get wizard-pages 0) (sc/select [:#first-move]) sc/selection))
+              :else (optional-rules-panel))))))
 
 (defn extract-basic-parameters [_]
   (let [p (:basic-parameters @panel-map)
         name (sc/text (sc/select p [:#name]))
+        rule-set (extract-rule-set)
         fm (sc/text (sc/select p [:#first-move]))
         sm (sc/text (sc/select p [:#second-move]))
         nt (sc/selection (sc/select p [:#number-turns]))
         em? (sc/selection (sc/select p [:#extra-move?]))]
-    {:name name :fm fm :sm sm :nt nt :em? em?}))
+    {:name name :rule-set rule-set :fm :iift? iift? fm :sm sm :nt nt :em? em?}))
+
+(defn extract-optional-rules [_]
+  (let [p (:optional-rules @panel-map)
+        iift? (sc/selection (sc/select p [:#use-iift?]))
+        battlefield-integrity? (sc/selection (sc/select p [:#use-battlefield-integrity?]))]
+    {:iift? iift? :battlefield-integrity? battlefield-integrity?}))
 
 (defn extract-orientation [_]
   (let [p (:map-configuration @panel-map)]
