@@ -1,0 +1,82 @@
+<infantry>
+    <multi-man-counters>
+        <squads>
+            <squad>
+                <unit-name>First Line 4-6-7</unit-name>
+                <firepower>4</firepower>
+                <range>6</range>
+                <morale>7</morale>
+                <broken-morale>7</broken-morale>
+                <casualty-reduction>First Line 2-4-7</casualty-reduction>
+            </squad>
+        </squads>
+        <half-squads>
+            <half-squad>
+                <unit-name>First Line 2-4-7</unit-name>
+                <firepower>2</firepower>
+                <range>4</range>
+                <morale>7</morale>
+                <broken-morale>6</broken-morale>
+            </half-squad>
+        </half-squads>
+        <crews>
+            <crew>
+                <unit-name>2-2-8 Infantry Crew</unit-name>
+                <firepower>2</firepower>
+                <range>2</range>
+                <morale>8</morale>
+                <broken-morale>8</broken-morale>
+            </crew>
+        </crews>
+    </multi-man-counters>
+    <single-man-counters>
+        <single-man-counter>
+            <unit-name>10-3 Leader</unit-name>
+            <morale>10</morale>
+            <leadership-modifier>-3</leadership-modifier>
+            <broken-morale>10</broken-morale>
+        </single-man-counter>
+        <single-man-counter>
+            <unit-name>10-2 Leader</unit-name>
+            <morale>10</morale>
+            <leadership-modifier>-2</leadership-modifier>
+            <broken-morale>10</broken-morale>
+        </single-man-counter>
+        <single-man-counter>
+            <unit-name>9-2 Leader</unit-name>
+            <morale>9</morale>
+            <leadership-modifier>-2</leadership-modifier>
+            <broken-morale>9</broken-morale>
+        </single-man-counter>
+        <single-man-counter>
+            <unit-name>9-1 Leader</unit-name>
+            <morale>9</morale>
+            <leadership-modifier>-1</leadership-modifier>
+            <broken-morale>9</broken-morale>
+        </single-man-counter>
+        <single-man-counter>
+            <unit-name>8-1 Leader</unit-name>
+            <morale>8</morale>
+            <leadership-modifier>-1</leadership-modifier>
+            <broken-morale>8</broken-morale>
+        </single-man-counter>
+        <single-man-counter>
+            <unit-name>8-0 Leader</unit-name>
+            <morale>8</morale>
+            <leadership-modifier>0</leadership-modifier>
+            <broken-morale>8</broken-morale>
+        </single-man-counter>
+        <single-man-counter>
+            <unit-name>7-0 Leader</unit-name>
+            <morale>7</morale>
+            <leadership-modifier>0</leadership-modifier>
+            <broken-morale>7</broken-morale>
+        </single-man-counter>
+        <single-man-counter>
+            <unit-name>6+1 Leader</unit-name>
+            <morale>6</morale>
+            <leadership-modifier>1</leadership-modifier>
+            <broken-morale>6</broken-morale>
+        </single-man-counter>
+    </single-man-counters>
+</infantry>

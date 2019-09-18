@@ -9,7 +9,8 @@
   (:import [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener WizardSettings]
            (javax.swing JTable DefaultCellEditor)
            (javax.swing.table TableColumnModel TableColumn)
-           (javax.swing.table AbstractTableModel DefaultTableCellRenderer)))
+           (javax.swing.table AbstractTableModel DefaultTableCellRenderer)
+           (java.io File)))
 
 ; TODO: Choose scenario from list... pre-fills basic-parameters and map-configuration.
 ; TODO: Different size maps (HASL, DASL, etc.)
@@ -32,12 +33,28 @@
 ; as each panel is created, the code adds a reference to the actual current panel into
 ; this stateful map (argh!). When the data is extracted, the code uses these references
 ; instead of the dialog root to extract the data in the last instance of each panel.
-(def ^{:private true} panel-map (atom {:basic-parameters nil :optional-rules nil :map-configuration nil :side-2 nil :side-1 nil}))
+(def ^{:private true} panel-map (atom {:basic-parameters nil :optional-rules nil :map-configuration nil :oob [] :setup []}))
 
 (defn- extract-nationalities []
   (with-open [r (-> "nationalities.xml" io/resource io/reader)]
     (let [z (-> r xml/parse zip/xml-zip)]
       (map (zip-xml/attr :name) (zip-xml/xml-> z :Nationality)))))
+
+(defn- extract-counters [nationality unit-type]
+  (let [file-path (str (str/lower-case nationality) File/separator
+                       (str/lower-case unit-type) ".xml")]
+    (with-open [r (-> file-path
+                      io/resource
+                      io/reader)]
+      (let [z (-> r xml/parse zip/xml-zip)]
+        (loop [loc z
+               units []]
+          (if (zip/end? loc)
+            units
+            (let [node (zip/node loc)]
+              (if (= :unit-name (:tag node))
+                (recur (zip/next loc) (conj units (zip-xml/text loc)))
+                (recur (zip/next loc) units)))))))))
 
 (defn- create-rule-set-radio-buttons []
   (let [the-button-group (sc/button-group)]
@@ -210,17 +227,132 @@
     (swap! panel-map assoc :map-configuration p)
     p))
 
-(defn- second-move-initial-setup-page [name]
-  (let [title (str name " Initial Setup")
-        tip (str "Initial positions for all on-board " name " units.")]
-    (proxy [WizardPage seesaw.selector.Tag] [title tip]
-      (tag_name [] (.getSimpleName WizardPage)))))
-
 (defn- build-id [key side]
   (keyword (str key side)))
 
 (defn- build-pound-id [key side]
   (keyword (str "#" key side)))
+
+(defn- nth-string [n]
+  (str n (cond (= 11 (mod n 100)) "th"
+               (= 12 (mod n 100)) "th"
+               (= 1 (mod n 10)) "st"
+               (= 2 (mod n 10)) "nd"
+               :else "th")))
+
+(defn- build-oob-id [side-number]
+  (build-id "oob-id" side-number))
+
+(defn- build-oob-pound-id [side-number]
+  (build-pound-id "oob-id" side-number))
+
+(defn- build-nationality-id [side-number]
+  (build-id "nationality-id" side-number))
+
+(defn- build-nationality-pound-id [side-number]
+  (build-pound-id "nationality-id" side-number))
+
+(defn- build-counter-type-id [side-number]
+  (build-id "counter-type-id" side-number))
+
+(defn- build-counter-type-pound-id [side-number]
+  (build-pound-id "counter-type-id" side-number))
+
+(defn- build-counter-id [side-number]
+  (build-id "counter-id" side-number))
+
+(defn- build-counter-pound-id [side-number]
+  (build-pound-id "counter-id" side-number))
+
+(defn- build-number-counters-id [side-number]
+  (build-id "number-counters-id" side-number))
+
+(defn- build-number-counters-pound-id [side-number]
+  (build-pound-id "number-counters-id" side-number))
+
+(defn- build-add-to-oob-id [side-number]
+  (build-id "add-to-oob" side-number))
+
+(defn- build-remove-last-from-oob-id [side-number]
+  (build-id "remove-last-from-oob" side-number))
+
+(defn- build-remove-last-from-oob-pound-id [side-number]
+  (build-pound-id "remove-last-from-oob" side-number))
+
+(defn- update-counter-model [side-number t]
+  (let [r (sc/to-root t)
+        nationality (sc/selection (sc/select r [(build-nationality-pound-id side-number)]))
+        counter-type (sc/selection (sc/select r [(build-counter-type-pound-id side-number)]))
+        counter (sc/select r [(build-counter-pound-id side-number)])]
+    (sc/config! counter :model (extract-counters nationality counter-type))))
+
+(defn- add-to-oob-action [side-number t]
+  (let [r (sc/to-root t)
+        nationality (sc/selection (sc/select r [(build-nationality-pound-id side-number)]))
+        counter (sc/selection (sc/select r [(build-counter-pound-id side-number)]))
+        number-counters-spinner (sc/select r [(build-number-counters-pound-id side-number)])
+        number-counters (sc/selection number-counters-spinner)
+        counters (apply concat (repeat number-counters (list (table/row-count t)
+                                                       {:nationality nationality
+                                                        :counter     counter
+                                                        :unique-id   ""})))
+        remove-last-from-oob (sc/select r [(build-remove-last-from-oob-pound-id side-number)])]
+    (apply table/insert-at! t counters)
+    (sc/selection! number-counters-spinner 1)
+    (sc/config! remove-last-from-oob :enabled? true)))
+
+(defn- remove-last-from-oob-action [side-number t]
+  (let [r (sc/to-root t)
+        remove-last-from-oob (sc/select r [(build-remove-last-from-oob-pound-id side-number)])]
+    (table/remove-at! t (- (table/row-count t) 1))
+    (sc/config! remove-last-from-oob :enabled? (< 0 (table/row-count t)))))
+
+(defn- initial-oob-layout [side-number]
+  (let [t (sc/table :id (build-oob-id side-number) :model [:columns [:nationality :counter :unique-id]])
+        nationalities (extract-nationalities)
+        nationality (sc/combobox :id (build-nationality-id side-number)
+                                 :model nationalities
+                                 :listen [:action (fn [_] (update-counter-model side-number t))])
+        counter-type (sc/combobox :id (build-counter-type-id side-number)
+                                  :model ["Infantry" "Support Weapon" "Gun" "Vehicle" "Fortification" "Concealment"]
+                                  :listen [:action (fn [_] (update-counter-model side-number t))])
+        counter (sc/combobox :id (build-counter-id side-number)
+                             :model (extract-counters (sc/selection nationality) (sc/selection counter-type)))
+        number-counters (sc/spinner :id (build-number-counters-id side-number)
+                                    :model (sc/spinner-model 1 :from 1 :to 26 :by 1))
+        add-to-oob-button (sc/button :id (build-add-to-oob-id side-number)
+                                     :text "Add to OoB"
+                                     :listen [:action (fn [_] (add-to-oob-action side-number t))])
+        remove-last-from-oob-button (sc/button :id (build-remove-last-from-oob-id side-number)
+                                               :text "Remove last from OoB"
+                                               :listen [:action (fn [_] (remove-last-from-oob-action side-number t))]
+                                               :enabled? false)
+        layout {:border 5
+                :items  [(sc/horizontal-panel :items ["Nationality: " nationality [:fill-h 10]
+                                                      "Counter Type: " counter-type])
+                         [:fill-v 5]
+                         (sc/horizontal-panel :items ["Counter: " counter [:fill-h 10]
+                                                      "Number of Counters: " number-counters])
+                         [:fill-v 5]
+                         (sc/horizontal-panel :items [add-to-oob-button :fill-h remove-last-from-oob-button])
+                         [:fill-v 5]
+                         (sc/scrollable t)]}]
+    layout))
+
+(defn- initial-oob-page [side-number]
+  (let [title (str "Order of Battle (OOB) Panel " (inc side-number))
+        tip (str "Initial OOB for all units on side " (nth-string (inc side-number)) ".")]
+    (proxy [WizardPage seesaw.selector.Tag] [title tip]
+      (tag_name [] (.getSimpleName WizardPage)))))
+
+(defn- initial-oob-panel [side-number]
+  (let [layout (initial-oob-layout side-number)
+        p (sc/abstract-panel
+            (initial-oob-page side-number)
+            (layout/box-layout :vertical)
+            layout)]
+    (swap! panel-map assoc-in [:oob side-number] p)
+    p))
 
 (defn- build-unique-id [side]
   (build-id "unique-id" side))
@@ -240,95 +372,92 @@
 (defn- build-covered-arc-pound-id [side]
   (build-pound-id "covered-arc-id" side))
 
-(defn- build-oob-side-id [side]
-  (build-id "oob-side-id" side))
+(defn- build-setup-id [side]
+  (build-id "setup-id" side))
 
-(defn- build-oob-side-pound-id [side]
-  (build-pound-id "oob-side-id" side))
+(defn- build-setup-pound-id [side]
+  (build-pound-id "setup-id" side))
 
-(defn- build-add-to-oob-id [side]
-  (build-id "add-to-oob" side))
+(defn- build-add-to-setup-id [side]
+  (build-id "add-to-setup" side))
 
-(defn- build-add-to-oob-pound-id [side]
-  (build-pound-id "add-to-oob" side))
+(defn- build-add-to-setup-pound-id [side]
+  (build-pound-id "add-to-setup" side))
 
-(defn- build-remove-last-from-oob-id [side]
-  (build-id "remove-last-from-oob" side))
+(defn- build-remove-last-from-setup-id [side]
+  (build-id "remove-last-from-setup" side))
 
-(defn- build-remove-last-from-oob-pound-id [side]
-  (build-pound-id "remove-last-from-oob" side))
+(defn- build-remove-last-from-setup-pound-id [side]
+  (build-pound-id "remove-last-from-setup" side))
 
-(defn- add-to-oob-enabled? [unique-pound-id position-pound-id e]
+(defn- add-to-setup-enabled? [unique-pound-id position-pound-id e]
   (let [r (sc/to-root e)
         s1 (-> r (sc/select [unique-pound-id]) sc/text)
         s2 (-> r (sc/select [position-pound-id]) sc/text)]
     (and (-> s1 str/blank? not)
          (-> s2 str/blank? not))))
 
-(defn- configure-add-to-oob-enabled-state [side t]
+(defn- configure-add-to-setup-enabled-state [side t]
   (let [r (sc/to-root t)
-        add-to-oob (sc/select r [(build-add-to-oob-pound-id side)])]
-    (sc/config! add-to-oob :enabled? (add-to-oob-enabled? (build-unique-pound-id side) (build-position-pound-id side) t))))
+        add-to-oob (sc/select r [(build-add-to-setup-pound-id side)])]
+    (sc/config! add-to-oob :enabled? (add-to-setup-enabled? (build-unique-pound-id side) (build-position-pound-id side) t))))
 
-(defn- add-to-oob-action [side p _]
+(defn- add-to-setup-action [side p _]
   (let [unique-id (sc/select p [(build-unique-pound-id side)])
         position (sc/select p [(build-position-pound-id side)])
         covered-arc (sc/select p [(build-covered-arc-pound-id side)])
-        remove-last-from-oob (sc/select p [(build-remove-last-from-oob-pound-id side)])
-        t (sc/select p [(build-oob-side-pound-id side)])]
-    (table/insert-at! t (table/row-count t) {:unique-id (sc/text unique-id) :position (sc/text position) :covered-arc (sc/text covered-arc)})
+        remove-last-from-oob (sc/select p [(build-remove-last-from-setup-pound-id side)])
+        t (sc/select p [(build-setup-pound-id side)])]
+    (table/insert-at! t (table/row-count t) {:unique-id (sc/text unique-id)
+                                             :position (sc/text position)
+                                             :covered-arc (sc/text covered-arc)})
     (sc/config! remove-last-from-oob :enabled? true)
     (sc/text! unique-id "")
     (sc/text! position "")
     (sc/text! covered-arc "")))
 
-(defn- remove-from-oob-action [side p _]
-  (let [remove-last-from-oob (sc/select p [(build-remove-last-from-oob-pound-id side)])
-        t (sc/select p [(build-oob-side-pound-id side)])]
+(defn- remove-last-from-setup-action [side p _]
+  (let [remove-last-from-oob (sc/select p [(build-remove-last-from-setup-pound-id side)])
+        t (sc/select p [(build-setup-pound-id side)])]
     (table/remove-at! t (- (table/row-count t) 1))
     (sc/config! remove-last-from-oob :enabled? (< 0 (table/row-count t)))))
 
-(defn- initial-setup-layout [side]
-  (let [t (sc/table :id (build-oob-side-id side) :model [:columns [:unique-id :position :covered-arc]])
-        unique-id-text (sc/text :id (build-unique-id side) :listen [:document (fn [_] (configure-add-to-oob-enabled-state side t))])
-        position-text (sc/text :id (build-position-id side) :listen [:document (fn [_] (configure-add-to-oob-enabled-state side t))])
-        covered-arc-text (sc/text :id (build-covered-arc-id side) :listen [:document (fn [_] (configure-add-to-oob-enabled-state side t))])
-        add-to-oob-button (sc/button :id (build-add-to-oob-id side) :text "Add to OoB")
-        remove-last-from-oob-button (sc/button :id (build-remove-last-from-oob-id side) :text "Remove last from OoB" :enabled? false)
+(defn- initial-setup-layout [setup-panel-index]
+  (let [t (sc/table :id (build-setup-id setup-panel-index) :model [:columns [:unique-id :position :covered-arc]])
+        unique-id-text (sc/text :id (build-unique-id setup-panel-index)
+                                :listen [:document (fn [_] (configure-add-to-setup-enabled-state setup-panel-index t))])
+        position-text (sc/text :id (build-position-id setup-panel-index)
+                               :listen [:document (fn [_] (configure-add-to-setup-enabled-state setup-panel-index t))])
+        covered-arc-text (sc/text :id (build-covered-arc-id setup-panel-index)
+                                  :listen [:document (fn [_] (configure-add-to-setup-enabled-state setup-panel-index t))])
+        add-to-setup-button (sc/button :id (build-add-to-setup-id setup-panel-index) :text "Add to OoB")
+        remove-last-from-setup-button (sc/button :id (build-remove-last-from-setup-id setup-panel-index)
+                                               :text "Remove last from OoB" :enabled? false)
         layout {:border 5
-                :items  [(sc/horizontal-panel :items ["Unique ID: " unique-id-text [:fill-h 10] "Position: " position-text [:fill-h 10] "Covered Arc (CA): " covered-arc-text])
+                :items  [(sc/horizontal-panel :items ["Unique ID: " unique-id-text [:fill-h 10]
+                                                      "Position: " position-text [:fill-h 10]
+                                                      "Covered Arc (CA): " covered-arc-text])
                          [:fill-v 5]
-                         (sc/horizontal-panel :items [add-to-oob-button :fill-h remove-last-from-oob-button])
+                         (sc/horizontal-panel :items [add-to-setup-button :fill-h remove-last-from-setup-button])
                          [:fill-v 5]
                          (sc/scrollable t)]}]
-    {:add-to-oob-button add-to-oob-button :remove-last-from-oob-button remove-last-from-oob-button :layout layout}))
+    {:add-to-setup-button add-to-setup-button :remove-last-from-setup-button remove-last-from-setup-button :layout layout}))
 
-(defn- second-move-initial-setup-panel [name]
-  (let [{:keys [add-to-oob-button remove-last-from-oob-button layout]} (initial-setup-layout "2")
-        p (sc/abstract-panel
-            (second-move-initial-setup-page name)
-            (layout/box-layout :vertical)
-            layout)]
-    (sc/listen add-to-oob-button :action (partial add-to-oob-action "2" p))
-    (sc/listen remove-last-from-oob-button :action (partial remove-from-oob-action "2" p))
-    (swap! panel-map assoc :side-2 p)
-    p))
-
-(defn- first-move-initial-setup-page [name]
-  (let [title (str name " Initial Setup")
-        tip (str "Initial positions for all on-board " name " units.")]
+(defn- initial-setup-page [setup-panel-index]
+  (let [title (str "Setup Panel " (inc setup-panel-index))
+        tip (str "Initial positions for all units setup " (nth-string (inc setup-panel-index)) ".")]
     (proxy [WizardPage seesaw.selector.Tag] [title tip]
       (tag_name [] (.getSimpleName WizardPage)))))
 
-(defn- first-move-initial-setup-panel [name]
-  (let [{:keys [add-to-oob-button remove-last-from-oob-button layout]} (initial-setup-layout "1")
+(defn- initial-setup-panel [setup-panel-index]
+  (let [{:keys [add-to-setup-button remove-last-from-setup-button layout]} (initial-setup-layout setup-panel-index)
         p (sc/abstract-panel
-            (first-move-initial-setup-page name)
+            (initial-setup-page setup-panel-index)
             (layout/box-layout :vertical)
             layout)]
-    (sc/listen add-to-oob-button :action (partial add-to-oob-action "1" p))
-    (sc/listen remove-last-from-oob-button :action (partial remove-from-oob-action "1" p))
-    (swap! panel-map assoc :side-1 p)
+    (sc/listen add-to-setup-button :action (partial add-to-setup-action setup-panel-index p))
+    (sc/listen remove-last-from-setup-button :action (partial remove-last-from-setup-action setup-panel-index p))
+    (swap! panel-map assoc-in [:setup setup-panel-index] p)
     p))
 
 (def ^{:private true} optional-rules-page
@@ -367,9 +496,11 @@
       (let [c (.size wizard-pages)]
         (cond (= 0 c) (basic-parameters-panel)
               (= 1 c) (map-configuration-panel)
-              (= 2 c) (second-move-initial-setup-panel (-> (.get wizard-pages 0) (sc/select [:#second-move]) sc/selection))
-              (= 3 c) (first-move-initial-setup-panel (-> (.get wizard-pages 0) (sc/select [:#first-move]) sc/selection))
-              :else (optional-rules-panel))))))
+              :else (let [p (:basic-parameters @panel-map)
+                          number-sides (sc/selection (sc/select p [:#number-sides]))]
+                      (cond (< c (+ 2 number-sides)) (initial-oob-panel (- c 2))
+                            (= c (+ 2 number-sides)) (initial-setup-panel (- c 2 number-sides))
+                            :else (optional-rules-panel))))))))
 
 (defn extract-basic-parameters [_]
   (let [p (:basic-parameters @panel-map)
@@ -379,7 +510,7 @@
         sm (sc/text (sc/select p [:#second-move]))
         nt (sc/selection (sc/select p [:#number-turns]))
         em? (sc/selection (sc/select p [:#extra-move?]))]
-    {:name name :rule-set rule-set :fm :iift? iift? fm :sm sm :nt nt :em? em?}))
+    {:name name :rule-set rule-set :fm fm :sm sm :nt nt :em? em?}))
 
 (defn extract-optional-rules [_]
   (let [p (:optional-rules @panel-map)
@@ -409,7 +540,7 @@
     (partition number-columns the-maps)))
 
 (defn- extract-initial-setup [p side]
-  (let [t (sc/select p [(build-oob-side-pound-id side)])]
+  (let [t (sc/select p [(build-setup-pound-id side)])]
     (vec (for [i (range (table/row-count t))]
            (vec (vals (table/value-at t i)))))))
 
