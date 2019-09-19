@@ -73,9 +73,15 @@
                                                          (when-not (str/blank? covered-arc)
                                                            {:covered-arc covered-arc})))))))
 
-(defn create-game-start-xml [name side1 side2 number-turns additional-half-turn orientation direction map-rows side2-initial-setup side1-initial-setup]
+(defn create-game-start-xml [name rule-set number-turns sides orientation direction map-rows side2-initial-setup side1-initial-setup]
   (xml/element :game {}
-               (xml/element :scenario {:name name :number-full-turns number-turns :additional-half-turn additional-half-turn :side1 side1 :side2 side2}
+               (xml/element :scenario {:name name :rule-set rule-set :number-full-turns number-turns}
+                            (apply xml/element :sides {}
+                                         (doall (for [[move-order is-nationality? nationality coalition extra-move?] sides]
+                                                  (xml/element :side {:move-order      move-order
+                                                                      :is-nationality? is-nationality?
+                                                                      :side-name       (if is-nationality? nationality coalition)
+                                                                      :extra-move?     extra-move?}))))
                             (xml/element :map-configuration {:orientation orientation :direction direction}
                                          (xml/element :map-rows {}
                                                       (doall (for [mr map-rows]
@@ -92,10 +98,12 @@
                             (create-initial-setup-xml :side1-initial-setup side1-initial-setup))
                (xml/element :turns {}
                             (xml/element :turn {:number 1}
-                                         (xml/element :side {:attacker side1}
-                                                      (xml/element :phase {:name "Rally"}))))))
+                                         (let [[_ is-nationality? nationality coalition _] (get sides 0)
+                                               side1 (if is-nationality? nationality coalition)]
+                                           (xml/element :side {:attacker side1}
+                                                        (xml/element :phase {:name "Rally"})))))))
 
-(def game-start (create-game-start-xml "War of the Rats" "German" "Russian" 6 false "horizontal" "up" [[[true "z" false false true false]]] [["1.A" "zA1"]] []))
+(def game-start (create-game-start-xml "War of the Rats" "asl-sk" 6 [[1 true "German" "" false] [2 true "Russian" "" false]] "horizontal" "up" [[[true "z" false false true false]]] [["1.A" "zA1"]] []))
 
 (defn initial-game-zip-loc [the-xml]
   (-> the-xml
@@ -1052,13 +1060,13 @@
     (reset-event-panel e)))
 
 (defn- create-new-game [d]
-  (let [{:keys [name fm sm nt em?]} (nw/extract-basic-parameters d)
+  (let [{:keys [name rule-set nt sides]} (nw/extract-basic-parameters d)
         orientation (nw/extract-orientation d)
         direction (nw/extract-direction d)
         map-rows (nw/extract-map-rows-from-wizard d)
         side2-initial-setup (nw/extract-side2-initial-setup d)
         side1-initial-setup (nw/extract-side1-initial-setup d)]
-    (swap! the-game assoc :game-zip-loc (initial-game-zip-loc (create-game-start-xml name fm sm nt em? orientation direction map-rows side2-initial-setup side1-initial-setup))
+    (swap! the-game assoc :game-zip-loc (initial-game-zip-loc (create-game-start-xml name rule-set nt sides orientation direction map-rows side2-initial-setup side1-initial-setup))
            :is-modified? true
            :file nil)))
 

@@ -339,9 +339,17 @@
                          (sc/scrollable t)]}]
     layout))
 
+(defn- extract-sides []
+  (let [p (:basic-parameters @panel-map)
+        t (sc/select p [:#side-table])]
+    (vec (for [i (range (table/row-count t))]
+           (vec (vals (table/value-at t i)))))))
+
 (defn- initial-oob-page [side-number]
-  (let [title (str "Order of Battle (OOB) Panel " (inc side-number))
-        tip (str "Initial OOB for all units on side " (nth-string (inc side-number)) ".")]
+  (let [[_ is-nationality? nationality coalition _] (get (extract-sides) side-number)
+        side-name (if is-nationality? nationality coalition)
+        title (str side-name " Order of Battle (OOB) Panel")
+        tip (str "Initial OOB for all units on the " side-name "side.")]
     (proxy [WizardPage seesaw.selector.Tag] [title tip]
       (tag_name [] (.getSimpleName WizardPage)))))
 
@@ -506,11 +514,9 @@
   (let [p (:basic-parameters @panel-map)
         name (sc/text (sc/select p [:#name]))
         rule-set (extract-rule-set)
-        fm (sc/text (sc/select p [:#first-move]))
-        sm (sc/text (sc/select p [:#second-move]))
         nt (sc/selection (sc/select p [:#number-turns]))
-        em? (sc/selection (sc/select p [:#extra-move?]))]
-    {:name name :rule-set rule-set :fm fm :sm sm :nt nt :em? em?}))
+        sides (extract-sides)]
+    {:name name :rule-set rule-set :nt nt :sides sides}))
 
 (defn extract-optional-rules [_]
   (let [p (:optional-rules @panel-map)
