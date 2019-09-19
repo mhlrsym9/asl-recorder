@@ -77,16 +77,16 @@
   (xml/element :game {}
                (xml/element :scenario {:name name :rule-set rule-set :number-full-turns number-turns}
                             (apply xml/element :sides {}
-                                         (doall (for [[move-order is-nationality? nationality coalition extra-move?] sides]
+                                         (doall (for [[move-order is-nationality? side-name _ _ extra-move?] sides]
                                                   (xml/element :side {:move-order      move-order
                                                                       :is-nationality? is-nationality?
-                                                                      :side-name       (if is-nationality? nationality coalition)
+                                                                      :side-name       side-name
                                                                       :extra-move?     extra-move?}))))
                             (xml/element :map-configuration {:orientation orientation :direction direction}
-                                         (xml/element :map-rows {}
+                                         (apply xml/element :map-rows {}
                                                       (doall (for [mr map-rows]
                                                                (xml/element :map-row {}
-                                                                            (xml/element :maps {}
+                                                                            (apply xml/element :maps {}
                                                                                          (doall (for [[present board-id upper-left upper-right lower-left lower-right] mr]
                                                                                                   (xml/element :map {:present     present
                                                                                                                      :board-id    board-id

@@ -5,7 +5,9 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.zip :as zip]
-            [seesaw [table :as table] [mig :as sm]])
+            [seesaw [table :as table] [mig :as sm]]
+            [asl-recorder.new-wizard-pages.side-configuration :as side]
+            [asl-recorder.new-wizard-pages.utilities :as u])
   (:import [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener WizardSettings]
            (javax.swing JTable DefaultCellEditor)
            (javax.swing.table TableColumnModel TableColumn)
@@ -35,11 +37,6 @@
 ; instead of the dialog root to extract the data in the last instance of each panel.
 (def ^{:private true} panel-map (atom {:basic-parameters nil :optional-rules nil :map-configuration nil :oob [] :setup []}))
 
-(defn- extract-nationalities []
-  (with-open [r (-> "nationalities.xml" io/resource io/reader)]
-    (let [z (-> r xml/parse zip/xml-zip)]
-      (map (zip-xml/attr :name) (zip-xml/xml-> z :Nationality)))))
-
 (defn- extract-counters [nationality unit-type]
   (let [file-path (str (str/lower-case nationality) File/separator
                        (str/lower-case unit-type) ".xml")]
@@ -64,44 +61,17 @@
      (sc/radio :id :asl-sk :class :orientation-class :text "ASL Starter Kit" :group the-button-group)
      :fill-h]))
 
-(def ^{:private true} side-configuration-table-columns
-  [{:key :move-order :text "Move Order" :class java.lang.Integer}
-   {:key :is-nationality? :text "Is Side Single Nationality?" :class java.lang.Boolean}
-   {:key :nationality :text "Nationality" :class java.lang.String}
-   {:key :coalition :text "Coalition Name" :class java.lang.String}
-   {:key :extra-move? :text "Has Extra Move?" :class java.lang.Boolean}])
-
-(def side-data-row [false "" "" false])
+; CJWizard has a bug where it reaches into the JSpinner, extracts the low-level
+; formattedTextField for the number model, and stores its value. The problem is
+; there is no way to change the name of this component, therefore if you use
+; a number-based JSpinner in a subsequent page, those JSpinners will be set to
+; the value of this one. CJWizard's rendering system sets the value of any component
+; it can find on each page if the component name matches. To avoid that, I need
+; to override the updateSettings implementation so I can remove that entry. Seesaw's id
+; system will allow me to extract the entry without using WizardSettings.
 
 (defn- basic-parameters-panel []
-  (let [nationalities (extract-nationalities)
-        nationality-combobox (sc/combobox :id :nationality :model nationalities)
-        create-side-rows (fn [idx]
-                           (into [] (concat (vector idx) side-data-row)))
-        t-model-data (atom (vec (map create-side-rows (range 1 3))))
-        t-model (proxy [AbstractTableModel] []
-                  (getRowCount [] (count @t-model-data))
-                  (getColumnCount [] (count side-configuration-table-columns))
-                  (getValueAt [r c] (nth (nth @t-model-data r) c))
-                  (isCellEditable [r c] (let [is-nationality? (nth (nth @t-model-data r) 1)]
-                                          (cond (= c 0) false
-                                                (= c 1) true
-                                                (= c 2) is-nationality?
-                                                (= c 3) (not is-nationality?)
-                                                (= c 4) true)))
-                  (getColumnName [c] (:text (nth side-configuration-table-columns c)))
-                  (getColumnClass [c] (:class (nth side-configuration-table-columns c)))
-                  (setValueAt [o r c]
-                    (let [row-data (assoc (nth @t-model-data r) c o)]
-                      (swap! t-model-data assoc r row-data))))
-        t (sc/table :id :side-table :model t-model)
-        update-table-fn (fn [e]
-                          (let [r (sc/to-root e)
-                                number-sides (-> r (sc/select [:#number-sides]) sc/selection)
-                                new-vec (vec (map create-side-rows (range 1 (inc number-sides))))]
-                            (reset! t-model-data new-vec)
-                            (.fireTableDataChanged t-model)))
-        p (sc/abstract-panel
+  (let [p (sc/abstract-panel
             basic-parameters-page
             (layout/box-layout :vertical)
             {:border 5
@@ -112,35 +82,29 @@
                       [:fill-v 5]
                       (sc/horizontal-panel :items ["Number Turns: " (sc/spinner :id :number-turns
                                                                                 :model (sc/spinner-model 1 :from 1 :to 15 :by 1))])
-                      [:fill-v 5]
-                      (sc/horizontal-panel :items ["Number of Sides: "
-                                                   (sc/spinner :id :number-sides
-                                                               :model (sc/spinner-model 2 :from 2 :to 4 :by 1)
-                                                               :listen [:change update-table-fn])])
-                      [:fill-v 5]
-                      (sc/scrollable t)
                       :fill-v]})
         preferred-size-fn #(-> p (sc/select %) (sc/config :preferred-size))
         maximum-size-fn #(-> p (sc/select %) (sc/config! :maximum-size (preferred-size-fn %)))]
-    (dorun (map #(maximum-size-fn [%]) [:#name :#number-turns :#side-table]))
+    (dorun (map #(maximum-size-fn [%]) [:#name :#number-turns]))
     (swap! panel-map assoc :basic-parameters p)
-    (let [column-model (.getColumnModel t)
-          column (.getColumn column-model 2)
-          default-cell-renderer (DefaultTableCellRenderer.)
-          default-cell-editor (DefaultCellEditor. nationality-combobox)]
-      (.setToolTipText default-cell-renderer "Click for combo box!")
-      (.setCellEditor column default-cell-editor)
-      (.setCellRenderer column default-cell-renderer))
     p))
 
-; CJWizard has a bug where it reaches into the JSpinner, extracts the low-level
-; formattedTextField for the number model, and stores its value. The problem is
-; there is no way to change the name of this component, therefore if you use
-; a number-based JSpinner in a subsequent page, those JSpinners will be set to
-; the value of this one. CJWizard's rendering system sets the value of any component
-; it can find on each page if the component name matches. To avoid that, I need
-; to override the updateSettings implementation so I can remove that entry. Seesaw's id
-; system will allow me to extract the entry without using WizardSettings.
+(def ^{:private true} optional-rules-page
+  (proxy [WizardPage seesaw.selector.Tag] ["Optional Rules" "Choose the ASL optional rules in effect for this game."]
+    (tag_name [] (.getSimpleName WizardPage))))
+
+(defn- optional-rules-panel []
+  (let [p (sc/abstract-panel
+            optional-rules-page
+            (layout/box-layout :vertical)
+            {:border 5
+             :items  [:fill-v
+                      (sc/horizontal-panel :items [(sc/checkbox :id :use-iift? :text "Use IIFT?")])
+                      [:fill-v 5]
+                      (sc/horizontal-panel :items [(sc/checkbox :id :use-battlefield-integrity? :text "Use Battlefield Integrity?")])
+                      :fill-v]})]
+    (swap! panel-map assoc :optional-rules p)
+    p))
 
 (def ^{:private true} map-configuration-page
   (proxy [WizardPage seesaw.selector.Tag] ["Map Configuration" "Layout of the game area."]
@@ -292,12 +256,11 @@
         counter (sc/selection (sc/select r [(build-counter-pound-id side-number)]))
         number-counters-spinner (sc/select r [(build-number-counters-pound-id side-number)])
         number-counters (sc/selection number-counters-spinner)
-        counters (apply concat (repeat number-counters (list (table/row-count t)
-                                                       {:nationality nationality
-                                                        :counter     counter
-                                                        :unique-id   ""})))
+        entry {:nationality     nationality
+               :counter         counter
+               :number-counters number-counters}
         remove-last-from-oob (sc/select r [(build-remove-last-from-oob-pound-id side-number)])]
-    (apply table/insert-at! t counters)
+    (apply table/insert-at! t entry)
     (sc/selection! number-counters-spinner 1)
     (sc/config! remove-last-from-oob :enabled? true)))
 
@@ -308,8 +271,8 @@
     (sc/config! remove-last-from-oob :enabled? (< 0 (table/row-count t)))))
 
 (defn- initial-oob-layout [side-number]
-  (let [t (sc/table :id (build-oob-id side-number) :model [:columns [:nationality :counter :unique-id]])
-        nationalities (extract-nationalities)
+  (let [t (sc/table :id (build-oob-id side-number) :model [:columns [:nationality :counter :number-counters]])
+        nationalities (u/extract-nationalities)
         nationality (sc/combobox :id (build-nationality-id side-number)
                                  :model nationalities
                                  :listen [:action (fn [_] (update-counter-model side-number t))])
@@ -340,14 +303,13 @@
     layout))
 
 (defn- extract-sides []
-  (let [p (:basic-parameters @panel-map)
+  (let [p (:side-configuration @panel-map)
         t (sc/select p [:#side-table])]
     (vec (for [i (range (table/row-count t))]
            (vec (vals (table/value-at t i)))))))
 
 (defn- initial-oob-page [side-number]
-  (let [[_ is-nationality? nationality coalition _] (get (extract-sides) side-number)
-        side-name (if is-nationality? nationality coalition)
+  (let [[_ _ side-name _ _ _] (get (extract-sides) side-number)
         title (str side-name " Order of Battle (OOB) Panel")
         tip (str "Initial OOB for all units on the " side-name "side.")]
     (proxy [WizardPage seesaw.selector.Tag] [title tip]
@@ -468,26 +430,28 @@
     (swap! panel-map assoc-in [:setup setup-panel-index] p)
     p))
 
-(def ^{:private true} optional-rules-page
-  (proxy [WizardPage seesaw.selector.Tag] ["Optional Rules" "Choose the ASL optional rules in effect for this game."]
-    (tag_name [] (.getSimpleName WizardPage))
-    (rendering [path settings]
-      (proxy-super rendering path settings)
-      (doto this
-        (.setFinishEnabled true)
-        (.setNextEnabled false)))))
+(defn- final-layout []
+  (let [layout {:border 5
+                :items ["Congratulations! You're done!"]}]
+    layout))
 
-(defn- optional-rules-panel []
-  (let [p (sc/abstract-panel
-            optional-rules-page
+(defn- final-page []
+  (let [title "Final Panel "
+        tip "This is the final panel!"]
+    (proxy [WizardPage seesaw.selector.Tag] [title tip]
+      (tag_name [] (.getSimpleName WizardPage))
+      (rendering [path settings]
+        (proxy-super rendering path settings)
+        (doto this
+          (.setFinishEnabled true)
+          (.setNextEnabled false))))))
+
+(defn- final-panel []
+  (let [layout (final-layout)
+        p (sc/abstract-panel
+            (final-page)
             (layout/box-layout :vertical)
-            {:border 5
-             :items  [:fill-v
-                      (sc/horizontal-panel :items [(sc/checkbox :id :use-iift? :text "Use IIFT?")])
-                      [:fill-v 5]
-                      (sc/horizontal-panel :items [(sc/checkbox :id :use-battlefield-integrity? :text "Use Battlefield Integrity?")])
-                      :fill-v]})]
-    (swap! panel-map assoc :optional-rules p)
+            layout)]
     p))
 
 (defn- is-asl-selected? []
@@ -503,12 +467,16 @@
     (createPage [_ wizard-pages _]
       (let [c (.size wizard-pages)]
         (cond (= 0 c) (basic-parameters-panel)
-              (= 1 c) (map-configuration-panel)
+              (= 1 c) (optional-rules-panel)
+              (= 2 c) (map-configuration-panel)
+              (= 3 c) (let [scp (side/side-configuration-panel)]
+                        (swap! panel-map assoc :side-configuration scp)
+                        scp)
               :else (let [p (:basic-parameters @panel-map)
                           number-sides (sc/selection (sc/select p [:#number-sides]))]
                       (cond (< c (+ 2 number-sides)) (initial-oob-panel (- c 2))
                             (= c (+ 2 number-sides)) (initial-setup-panel (- c 2 number-sides))
-                            :else (optional-rules-panel))))))))
+                            :else (final-panel))))))))
 
 (defn extract-basic-parameters [_]
   (let [p (:basic-parameters @panel-map)
