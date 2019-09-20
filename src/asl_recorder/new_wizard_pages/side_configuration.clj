@@ -2,7 +2,7 @@
   (:require [asl-recorder.new-wizard-pages.utilities :as u]
             [seesaw [core :as sc] [layout :as layout] [table :as table]])
   (:import [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener WizardSettings]
-           (javax.swing.table AbstractTableModel DefaultTableCellRenderer)
+           (javax.swing.table AbstractTableModel DefaultTableCellRenderer TableModel DefaultTableModel)
            (seesaw.selector Tag)))
 
 (def ^{:private true} side-data-row [false "" "" false])
@@ -48,7 +48,7 @@
         has-extra-move-checkbox (sc/select r [:#has-extra-move-checkbox])
         has-extra-move? (sc/selection has-extra-move-checkbox)
         remove-last-from-side-button (sc/select r [:#remove-last-from-side-button])]
-    (table/insert-at! t (.getRowCount t) {:move-order                  move-order
+    (table/insert-at! t (table/row-count t) {:move-order                  move-order
                                           :is-nationality?             is-nationality?
                                           :side-name                   side-name
                                           :number-initial-setup-groups number-initial-setup-groups
@@ -70,18 +70,7 @@
     (sc/config! remove-last-from-oob :enabled? (< 0 (table/row-count t)))))
 
 (defn- side-configuration-layout []
-  (let [t-model-data (atom [])
-        t-model (proxy [AbstractTableModel] []
-                  (getRowCount [] (count @t-model-data))
-                  (getColumnCount [] (count side-configuration-table-columns))
-                  (getValueAt [r c] (nth (nth @t-model-data r) c))
-                  (isCellEditable [_ _] false)
-                  (getColumnName [c] (:text (nth side-configuration-table-columns c)))
-                  (getColumnClass [c] (:class (nth side-configuration-table-columns c)))
-                  (setValueAt [o r c]
-                    (let [row-data (assoc (nth @t-model-data r) c o)]
-                      (swap! t-model-data assoc r row-data))))
-        t (sc/table :id :side-table :model t-model)
+  (let [t (sc/table :id :side-table :model [:columns side-configuration-table-columns])
         add-to-side-button (sc/button :id :add-to-side-button :text "Add this side"
                                       :listen [:action (fn [_] (add-to-side-action t))])
         remove-last-from-side-button (sc/button :id :remove-last-from-side-button
