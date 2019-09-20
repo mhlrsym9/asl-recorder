@@ -49,11 +49,11 @@
         has-extra-move? (sc/selection has-extra-move-checkbox)
         remove-last-from-side-button (sc/select r [:#remove-last-from-side-button])]
     (table/insert-at! t (table/row-count t) {:move-order                  move-order
-                                          :is-nationality?             is-nationality?
-                                          :side-name                   side-name
-                                          :number-initial-setup-groups number-initial-setup-groups
-                                          :number-reinforcement-groups number-reinforcement-groups
-                                          :has-extra-move?             has-extra-move?})
+                                             :is-nationality?             is-nationality?
+                                             :side-name                   side-name
+                                             :number-initial-setup-groups number-initial-setup-groups
+                                             :number-reinforcement-groups number-reinforcement-groups
+                                             :has-extra-move?             has-extra-move?})
     (sc/config! remove-last-from-side-button :enabled? true)
     (sc/selection! move-order-spinner 1)
     (sc/selection! use-nationality-name-for-side-name true)
@@ -113,3 +113,8 @@
             (layout/box-layout :vertical)
             layout)]
     p))
+
+(defn extract-side-configuration [pm]
+  (let [p (:side-configuration @pm)
+        t (sc/select p [:#side-table])]
+    (table/value-at t (range (table/row-count t)))))

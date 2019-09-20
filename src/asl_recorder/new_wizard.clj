@@ -6,15 +6,19 @@
             [clojure.string :as str]
             [clojure.zip :as zip]
             [seesaw [table :as table] [mig :as sm]]
+            [asl-recorder.new-wizard-pages.basic-configuration :as basic]
+            [asl-recorder.new-wizard-pages.map-configuration :as map]
+            [asl-recorder.new-wizard-pages.optional-rules :as optional]
             [asl-recorder.new-wizard-pages.side-configuration :as side]
             [asl-recorder.new-wizard-pages.utilities :as u])
   (:import [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener WizardSettings]
            (javax.swing JTable DefaultCellEditor)
            (javax.swing.table TableColumnModel TableColumn)
            (javax.swing.table AbstractTableModel DefaultTableCellRenderer)
-           (java.io File)))
+           (java.io File)
+           (seesaw.selector Tag)))
 
-; TODO: Choose scenario from list... pre-fills basic-parameters and map-configuration.
+; TODO: Choose scenario from list... pre-fills basic-configuration and map-configuration.
 ; TODO: Different size maps (HASL, DASL, etc.)
 ; TODO: Move to second page iff all fields on first page set.
 ; TODO: Move to second page iff first move name != second move name.
@@ -22,20 +26,13 @@
 ; TODO: Make sure each id is unique.
 ; TODO: Make sure all positions are valid ASL format and belong to one of the maps on the board.
 
-(def ^{:private true} basic-parameters-page
-  (proxy [WizardPage seesaw.selector.Tag] ["Game Parameters" "Basic parameters about the scenario to be recorded."]
-    (tag_name [] (.getSimpleName WizardPage))
-    (updateSettings [settings]
-      (proxy-super updateSettings settings)
-      (.remove settings "Spinner.formattedTextField"))))
-
 ; The wizard has problems destroying pages if you back up in that the standard seesaw
 ; select method thinks there are multiple elements for each created seesaw id, and thus
 ; seems to return the first created (select w/ id returns only one element). Therefore,
 ; as each panel is created, the code adds a reference to the actual current panel into
 ; this stateful map (argh!). When the data is extracted, the code uses these references
 ; instead of the dialog root to extract the data in the last instance of each panel.
-(def ^{:private true} panel-map (atom {:basic-parameters nil :optional-rules nil :map-configuration nil :oob [] :setup []}))
+(def ^{:private true} panel-map (atom {:basic-configuration nil :optional-rules nil :map-configuration nil :oob [] :setup []}))
 
 (defn- extract-counters [nationality unit-type]
   (let [file-path (str (str/lower-case nationality) File/separator
@@ -52,144 +49,6 @@
               (if (= :unit-name (:tag node))
                 (recur (zip/next loc) (conj units (zip-xml/text loc)))
                 (recur (zip/next loc) units)))))))))
-
-(defn- create-rule-set-radio-buttons []
-  (let [the-button-group (sc/button-group)]
-    [:fill-h
-     "Rule Set:"
-     (sc/radio :id :asl :class :orientation-class :text "ASL" :group the-button-group :selected? true)
-     (sc/radio :id :asl-sk :class :orientation-class :text "ASL Starter Kit" :group the-button-group)
-     :fill-h]))
-
-; CJWizard has a bug where it reaches into the JSpinner, extracts the low-level
-; formattedTextField for the number model, and stores its value. The problem is
-; there is no way to change the name of this component, therefore if you use
-; a number-based JSpinner in a subsequent page, those JSpinners will be set to
-; the value of this one. CJWizard's rendering system sets the value of any component
-; it can find on each page if the component name matches. To avoid that, I need
-; to override the updateSettings implementation so I can remove that entry. Seesaw's id
-; system will allow me to extract the entry without using WizardSettings.
-
-(defn- basic-parameters-panel []
-  (let [p (sc/abstract-panel
-            basic-parameters-page
-            (layout/box-layout :vertical)
-            {:border 5
-             :items  [:fill-v
-                      (sc/horizontal-panel :items ["Name: " (sc/text :id :name :columns 100)])
-                      [:fill-v 5]
-                      (sc/horizontal-panel :items (create-rule-set-radio-buttons))
-                      [:fill-v 5]
-                      (sc/horizontal-panel :items ["Number Turns: " (sc/spinner :id :number-turns
-                                                                                :model (sc/spinner-model 1 :from 1 :to 15 :by 1))])
-                      :fill-v]})
-        preferred-size-fn #(-> p (sc/select %) (sc/config :preferred-size))
-        maximum-size-fn #(-> p (sc/select %) (sc/config! :maximum-size (preferred-size-fn %)))]
-    (dorun (map #(maximum-size-fn [%]) [:#name :#number-turns]))
-    (swap! panel-map assoc :basic-parameters p)
-    p))
-
-(def ^{:private true} optional-rules-page
-  (proxy [WizardPage seesaw.selector.Tag] ["Optional Rules" "Choose the ASL optional rules in effect for this game."]
-    (tag_name [] (.getSimpleName WizardPage))))
-
-(defn- optional-rules-panel []
-  (let [p (sc/abstract-panel
-            optional-rules-page
-            (layout/box-layout :vertical)
-            {:border 5
-             :items  [:fill-v
-                      (sc/horizontal-panel :items [(sc/checkbox :id :use-iift? :text "Use IIFT?")])
-                      [:fill-v 5]
-                      (sc/horizontal-panel :items [(sc/checkbox :id :use-battlefield-integrity? :text "Use Battlefield Integrity?")])
-                      :fill-v]})]
-    (swap! panel-map assoc :optional-rules p)
-    p))
-
-(def ^{:private true} map-configuration-page
-  (proxy [WizardPage seesaw.selector.Tag] ["Map Configuration" "Layout of the game area."]
-    (tag_name [] (.getSimpleName WizardPage))
-    (updateSettings [settings]
-      (proxy-super updateSettings settings)
-      (.remove settings "Spinner.formattedTextField"))))
-
-(defn- create-orientation-radio-buttons []
-  (let [the-button-group (sc/button-group)]
-    [:fill-h
-     "Board Orientation:"
-     (sc/radio :id :vertical-orientation :class :orientation-class :text "Vertical" :group the-button-group :selected? true)
-     (sc/radio :id :horizontal-orientation :class :orientation-class :text "Horizontal" :group the-button-group)
-     :fill-h]))
-
-(defn- create-direction-radio-buttons []
-  (let [the-button-group (sc/button-group)]
-    [:fill-h
-     (sm/mig-panel :id :direction-panel :constraints ["wrap 2" "" ""] :items [["North is:"] [(sc/radio :id :up-direction :class :direction-class :text "above the first row of boards." :group the-button-group :selected? true)]
-                                                                                                [(sc/radio :id :right-direction :class :direction-class :text "to the right of the rightmost column of boards." :group the-button-group) "skip"]
-                                                                                                [(sc/radio :id :down-direction :class :direction-class :text "below the last row of boards." :group the-button-group) "skip"]
-                                                                                                [(sc/radio :id :left-direction :class :direction-class :text "to the left of the leftmost column of boards." :group the-button-group) "skip"]])
-     :fill-h]))
-
-
-(def ^{:private true} map-configuration-table-columns
-  [{:key :row :text "Row" :class java.lang.Integer}
-   {:key :column :text "Column" :class java.lang.Integer}
-   {:key :present? :text "Present?" :class java.lang.Boolean}
-   {:key :board-id :text "Board ID" :class java.lang.String}
-   {:key :upper-left? :text "Upper Left?" :class java.lang.Boolean}
-   {:key :upper-right? :text "Upper Right?" :class java.lang.Boolean}
-   {:key :lower-left? :text "Lower Left?" :class java.lang.Boolean}
-   {:key :lower-right? :text "Lower Right?" :class java.lang.Boolean}])
-
-(defn- map-configuration-panel []
-  (let [t-model-data (atom [[0 0 true "" false false false false]])
-        t-model (proxy [AbstractTableModel] []
-                  (getRowCount [] (count @t-model-data))
-                  (getColumnCount [] (count map-configuration-table-columns))
-                  (getValueAt [r c] (nth (nth @t-model-data r) c))
-                  (isCellEditable [r c] (or (= c 2)
-                                            (and (> c 2)
-                                                 (nth (nth @t-model-data r) 2))))
-                  (getColumnName [c] (:text (nth map-configuration-table-columns c)))
-                  (getColumnClass [c] (:class (nth map-configuration-table-columns c)))
-                  (setValueAt [o r c]
-                    (let [row-data (apply assoc (nth @t-model-data r) c o
-                                          (when (and (= c 2) (not o))
-                                            (proxy-super fireTableRowsUpdated r r)
-                                            '(3 "" 4 false 5 false 6 false)))]
-                      (swap! t-model-data assoc r row-data))))
-        t (sc/table :id :map-table :model t-model)
-        update-table-fn (fn [e]
-                          (let [r (sc/to-root e)
-                                number-rows (-> r (sc/select [:#number-rows]) sc/selection)
-                                number-columns (-> r (sc/select [:#number-columns]) sc/selection)
-                                new-vec (vec (for [r (range number-rows)
-                                                   c (range number-columns)]
-                                               [r c true "" false false false false]))]
-                            (reset! t-model-data new-vec)
-                            (.fireTableDataChanged t-model)))
-        p (sc/abstract-panel
-            map-configuration-page
-            (layout/box-layout :vertical)
-            {:border 5
-             :items  [:fill-v
-                      (sc/horizontal-panel :items ["Number of rows: "
-                                                   (sc/spinner :id :number-rows
-                                                               :model (sc/spinner-model 1 :from 1 :to 5 :by 1)
-                                                               :listen [:change update-table-fn])
-                                                   [:fill-h 10]
-                                                   "Number of columns: "
-                                                   (sc/spinner :id :number-columns
-                                                               :model (sc/spinner-model 1 :from 1 :to 5 :by 1)
-                                                               :listen [:change update-table-fn])])
-                      [:fill-v 5]
-                      (sc/horizontal-panel :items (create-orientation-radio-buttons))
-                      [:fill-v 5]
-                      (sc/horizontal-panel :items (create-direction-radio-buttons))
-                      [:fill-v 5]
-                      (sc/scrollable t)]})]
-    (swap! panel-map assoc :map-configuration p)
-    p))
 
 (defn- build-id [key side]
   (keyword (str key side)))
@@ -302,17 +161,11 @@
                          (sc/scrollable t)]}]
     layout))
 
-(defn- extract-sides []
-  (let [p (:side-configuration @panel-map)
-        t (sc/select p [:#side-table])]
-    (vec (for [i (range (table/row-count t))]
-           (vec (vals (table/value-at t i)))))))
-
 (defn- initial-oob-page [side-number]
-  (let [[_ _ side-name _ _ _] (get (extract-sides) side-number)
+  (let [{:keys [side-name]} (nth (side/extract-side-configuration panel-map) side-number)
         title (str side-name " Order of Battle (OOB) Panel")
         tip (str "Initial OOB for all units on the " side-name "side.")]
-    (proxy [WizardPage seesaw.selector.Tag] [title tip]
+    (proxy [WizardPage Tag] [title tip]
       (tag_name [] (.getSimpleName WizardPage)))))
 
 (defn- initial-oob-panel [side-number]
@@ -416,7 +269,7 @@
 (defn- initial-setup-page [setup-panel-index]
   (let [title (str "Setup Panel " (inc setup-panel-index))
         tip (str "Initial positions for all units setup " (nth-string (inc setup-panel-index)) ".")]
-    (proxy [WizardPage seesaw.selector.Tag] [title tip]
+    (proxy [WizardPage Tag] [title tip]
       (tag_name [] (.getSimpleName WizardPage)))))
 
 (defn- initial-setup-panel [setup-panel-index]
@@ -438,7 +291,7 @@
 (defn- final-page []
   (let [title "Final Panel "
         tip "This is the final panel!"]
-    (proxy [WizardPage seesaw.selector.Tag] [title tip]
+    (proxy [WizardPage Tag] [title tip]
       (tag_name [] (.getSimpleName WizardPage))
       (rendering [path settings]
         (proxy-super rendering path settings)
@@ -454,64 +307,34 @@
             layout)]
     p))
 
-(defn- is-asl-selected? []
-  (let [p (:basic-parameters @panel-map)]
-    (sc/selection (sc/select p [:#asl]))))
-
-(defn- extract-rule-set []
-  (if (is-asl-selected?) "asl" "asl-sk"))
-
 (def new-wizard-page-factory
   (reify PageFactory
     (isTransient [_ _ _] false)
     (createPage [_ wizard-pages _]
       (let [c (.size wizard-pages)]
-        (cond (= 0 c) (basic-parameters-panel)
-              (= 1 c) (optional-rules-panel)
-              (= 2 c) (map-configuration-panel)
+        (cond (= 0 c) (let [bpp (basic/basic-configuration-panel)]
+                        (swap! panel-map assoc :basic-configuration bpp)
+                        bpp)
+              (= 1 c) (let [orp (optional/optional-rules-panel)]
+                        (swap! panel-map assoc :optional-rules orp)
+                        orp)
+              (= 2 c) (let [mcp (map/map-configuration-panel)]
+                        (swap! panel-map assoc :map-configuration mcp)
+                        mcp)
               (= 3 c) (let [scp (side/side-configuration-panel)]
                         (swap! panel-map assoc :side-configuration scp)
                         scp)
-              :else (let [p (:basic-parameters @panel-map)
+              :else (let [p (:basic-configuration @panel-map)
                           number-sides (sc/selection (sc/select p [:#number-sides]))]
                       (cond (< c (+ 2 number-sides)) (initial-oob-panel (- c 2))
                             (= c (+ 2 number-sides)) (initial-setup-panel (- c 2 number-sides))
                             :else (final-panel))))))))
 
-(defn extract-basic-parameters [_]
-  (let [p (:basic-parameters @panel-map)
-        name (sc/text (sc/select p [:#name]))
-        rule-set (extract-rule-set)
-        nt (sc/selection (sc/select p [:#number-turns]))
-        sides (extract-sides)]
-    {:name name :rule-set rule-set :nt nt :sides sides}))
-
-(defn extract-optional-rules [_]
-  (let [p (:optional-rules @panel-map)
-        iift? (sc/selection (sc/select p [:#use-iift?]))
-        battlefield-integrity? (sc/selection (sc/select p [:#use-battlefield-integrity?]))]
-    {:iift? iift? :battlefield-integrity? battlefield-integrity?}))
-
-(defn extract-orientation [_]
-  (let [p (:map-configuration @panel-map)]
-    (if (sc/selection (sc/select p [:#vertical-orientation])) "Vertical" "Horizontal")))
-
-(defn extract-direction [_]
-  (let [p (:map-configuration @panel-map)]
-    (cond (sc/selection (sc/select p [:#up-direction])) "up"
-          (sc/selection (sc/select p [:#right-direction])) "right"
-          (sc/selection (sc/select p [:#down-direction])) "down"
-          :else "left")))
-
-(defn extract-map-rows-from-wizard [_]
-  (let [p (:map-configuration @panel-map)
-        t (sc/select p [:#map-table])
-        number-columns (-> p (sc/select [:#number-columns]) sc/selection)
-        tm (sc/config t :model)
-        c (.getColumnCount tm)
-        the-maps (for [i (range (.getRowCount tm))]
-                   (map #(.getValueAt tm i %) (range 2 c)))]
-    (partition number-columns the-maps)))
+(defn extract-wizard-data []
+  {:basic-configuration (basic/extract-basic-configuration panel-map)
+   :optional-rules (optional/extract-optional-rules panel-map)
+   :map-configuration (map/extract-map-configuration panel-map)
+   :side-configuration (side/extract-side-configuration panel-map)})
 
 (defn- extract-initial-setup [p side]
   (let [t (sc/select p [(build-setup-pound-id side)])]

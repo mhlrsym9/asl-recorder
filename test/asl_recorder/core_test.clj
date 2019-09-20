@@ -84,7 +84,9 @@
 
 (deftest test-advance-game-rally-phase-with-american-attacker
   (testing "Try manipulating the rally phase map and then seeing that that carries through advance."
-    (let [the-xml (create-game-start-xml "War of the Rats 2" "asl-sk" 6 [[1 true "American" "" false] [2 true "German" "" false]] "vertical" "up" [[[true "y" true false false false]]] [[]] [[]])
+    (let [the-xml (create-game-start-xml "War of the Rats 2" "asl-sk" 6 [{:move-order 1 :is-nationality? true :side-name "American" :extra-move? false}
+                                                                         {:move-order 2 :is-nationality? true :side-name "German" :extra-move? false}]
+                                         "vertical" "up" [[[true "y" true false false false]]] [[]] [[]])
           loc (initial-game-zip-loc the-xml)
           updated-rally-phase-map (get-sub-phase-map loc rally-phase-map)
           r (advance-game-sub-phase loc "Reinforcements" updated-rally-phase-map)]
@@ -122,7 +124,9 @@
       (is (= "Russian" side2)))))
 
 (defn- create-sample-game []
-  (create-game-start-xml "War" "asl-sk" 7 [[1 true "German" "" false] [2 true "Russian" "" false]] "vertical" "up" [[[true "y" true false false false]]] [[]] [[]]))
+  (create-game-start-xml "War" "asl-sk" 7 [{:move-order 1 :is-nationality? true :side-name "German" :extra-move? false}
+                                           {:move-order 2 :is-nationality? true :side-name "Russian" :extra-move? false}]
+                         "vertical" "up" [[[true "y" true false false false]]] [[]] [[]]))
 
 (deftest test-number-turns
   (testing "Make sure get-number-turns returns 6"

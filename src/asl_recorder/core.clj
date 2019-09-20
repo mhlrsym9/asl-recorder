@@ -77,7 +77,7 @@
   (xml/element :game {}
                (xml/element :scenario {:name name :rule-set rule-set :number-full-turns number-turns}
                             (apply xml/element :sides {}
-                                         (doall (for [[move-order is-nationality? side-name _ _ extra-move?] sides]
+                                         (doall (for [{:keys [move-order is-nationality? side-name extra-move?]} sides]
                                                   (xml/element :side {:move-order      move-order
                                                                       :is-nationality? is-nationality?
                                                                       :side-name       side-name
@@ -98,12 +98,14 @@
                             (create-initial-setup-xml :side1-initial-setup side1-initial-setup))
                (xml/element :turns {}
                             (xml/element :turn {:number 1}
-                                         (let [[_ is-nationality? nationality coalition _] (get sides 0)
-                                               side1 (if is-nationality? nationality coalition)]
-                                           (xml/element :side {:attacker side1}
+                                         (let [{:keys [side-name]} (get sides 0)]
+                                           (xml/element :side {:attacker side-name}
                                                         (xml/element :phase {:name "Rally"})))))))
 
-(def game-start (create-game-start-xml "War of the Rats" "asl-sk" 6 [[1 true "German" "" false] [2 true "Russian" "" false]] "horizontal" "up" [[[true "z" false false true false]]] [["1.A" "zA1"]] []))
+(def game-start (create-game-start-xml "War of the Rats" "asl-sk" 6
+                                       [{:move-order 1 :is-nationality? true :side-name "German" :extra-move? false}
+                                        {:move-order 2 :is-nationality? true :side-name "Russian" :extra-move? false}]
+                                       "horizontal" "up" [[[true "z" false false true false]]] [["1.A" "zA1"]] []))
 
 (defn initial-game-zip-loc [the-xml]
   (-> the-xml
@@ -1060,13 +1062,12 @@
     (reset-event-panel e)))
 
 (defn- create-new-game [d]
-  (let [{:keys [name rule-set nt sides]} (nw/extract-basic-parameters d)
-        orientation (nw/extract-orientation d)
-        direction (nw/extract-direction d)
-        map-rows (nw/extract-map-rows-from-wizard d)
+  (let [{:keys [side-configuration]
+         {:keys [name rule-set nt]} :basic-configuration
+         {:keys [orientation direction map-rows]} :map-configuration} (nw/extract-wizard-data)
         side2-initial-setup (nw/extract-side2-initial-setup d)
         side1-initial-setup (nw/extract-side1-initial-setup d)]
-    (swap! the-game assoc :game-zip-loc (initial-game-zip-loc (create-game-start-xml name rule-set nt sides orientation direction map-rows side2-initial-setup side1-initial-setup))
+    (swap! the-game assoc :game-zip-loc (initial-game-zip-loc (create-game-start-xml name rule-set nt side-configuration orientation direction map-rows side2-initial-setup side1-initial-setup))
            :is-modified? true
            :file nil)))
 
