@@ -53,7 +53,7 @@
                                              :side-name                   side-name
                                              :number-initial-setup-groups number-initial-setup-groups
                                              :number-reinforcement-groups number-reinforcement-groups
-                                             :has-extra-move?             has-extra-move?})
+                                             :extra-move?                 has-extra-move?})
     (sc/config! remove-last-from-side-button :enabled? true)
     (sc/selection! move-order-spinner 1)
     (sc/selection! use-nationality-name-for-side-name true)

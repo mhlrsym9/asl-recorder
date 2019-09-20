@@ -1,24 +1,12 @@
 (ns asl-recorder.new-wizard
-  (:require [seesaw [core :as sc] [mig :as sm] [chooser :as sch] [dnd :as dnd] [layout :as layout] selector [table :as t]]
-            [clojure.data.xml :as xml]
-            [clojure.data.zip.xml :as zip-xml]
-            [clojure.java.io :as io]
-            [clojure.string :as str]
-            [clojure.zip :as zip]
-            [seesaw [table :as table] [mig :as sm]]
-            [asl-recorder.new-wizard-pages.basic-configuration :as basic]
+  (:require [asl-recorder.new-wizard-pages.basic-configuration :as basic]
+            [asl-recorder.new-wizard-pages.final :as final]
             [asl-recorder.new-wizard-pages.map-configuration :as map]
             [asl-recorder.new-wizard-pages.order-of-battle :as oob]
             [asl-recorder.new-wizard-pages.optional-rules :as optional]
             [asl-recorder.new-wizard-pages.initial-setup :as is]
-            [asl-recorder.new-wizard-pages.side-configuration :as side]
-            [asl-recorder.new-wizard-pages.utilities :as u])
-  (:import [com.github.cjwizard WizardContainer PageFactory WizardPage WizardListener WizardSettings]
-           (javax.swing JTable DefaultCellEditor)
-           (javax.swing.table TableColumnModel TableColumn)
-           (javax.swing.table AbstractTableModel DefaultTableCellRenderer)
-           (java.io File)
-           (seesaw.selector Tag)))
+            [asl-recorder.new-wizard-pages.side-configuration :as side])
+  (:import [com.github.cjwizard PageFactory]))
 
 ; TODO: Choose scenario from list... pre-fills basic-configuration and map-configuration.
 ; TODO: Different size maps (HASL, DASL, etc.)
@@ -35,30 +23,6 @@
 ; this stateful map (argh!). When the data is extracted, the code uses these references
 ; instead of the dialog root to extract the data in the last instance of each panel.
 (def ^{:private true} panel-map (atom {:basic-configuration nil :optional-rules nil :map-configuration nil :initial-setup-oob [] :initial-setup [] :reinforcement-oob []}))
-
-(defn- final-layout []
-  (let [layout {:border 5
-                :items ["Congratulations! You're done!"]}]
-    layout))
-
-(defn- final-page []
-  (let [title "Final Panel "
-        tip "This is the final panel!"]
-    (proxy [WizardPage Tag] [title tip]
-      (tag_name [] (.getSimpleName WizardPage))
-      (rendering [path settings]
-        (proxy-super rendering path settings)
-        (doto this
-          (.setFinishEnabled true)
-          (.setNextEnabled false))))))
-
-(defn- final-panel []
-  (let [layout (final-layout)
-        p (sc/abstract-panel
-            (final-page)
-            (layout/box-layout :vertical)
-            layout)]
-    p))
 
 (def new-wizard-page-factory
   (reify PageFactory
@@ -94,7 +58,7 @@
                                   rop (oob/reinforcement-oob-panel group-number side-configuration)]
                               (swap! panel-map assoc-in [:reinforcements-oob group-number] rop)
                               rop)
-                            :else (final-panel))))))))
+                            :else (final/final-panel))))))))
 
 (defn extract-wizard-data []
   {:basic-configuration (basic/extract-basic-configuration panel-map)

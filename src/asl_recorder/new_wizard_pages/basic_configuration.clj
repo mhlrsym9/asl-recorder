@@ -46,14 +46,14 @@
     p))
 
 (defn- is-asl-selected? [pm]
-  (let [p (:basic-parameters @pm)]
+  (let [p (:basic-configuration @pm)]
     (sc/selection (sc/select p [:#asl]))))
 
 (defn- extract-rule-set [pm]
   (if (is-asl-selected? pm) "asl" "asl-sk"))
 
 (defn extract-basic-configuration [pm]
-  (let [p (:basic-parameters @pm)
+  (let [p (:basic-configuration @pm)
         name (sc/text (sc/select p [:#name]))
         rule-set (extract-rule-set pm)
         nt (sc/selection (sc/select p [:#number-turns]))]

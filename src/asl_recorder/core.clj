@@ -77,27 +77,27 @@
   (xml/element :game {}
                (xml/element :scenario {:name name :rule-set rule-set :number-full-turns number-turns}
                             (apply xml/element :sides {}
-                                         (doall (for [{:keys [move-order is-nationality? side-name extra-move? initial-setup]} sides]
-                                                  (xml/element :side {:move-order      move-order
-                                                                      :is-nationality? is-nationality?
-                                                                      :side-name       side-name
-                                                                      :extra-move?     extra-move?}
-                                                               (apply xml/element :initial-setup {} (create-initial-setup-xml initial-setup))))))
+                                   (doall (for [{:keys [move-order is-nationality? side-name extra-move? initial-setup]} sides]
+                                            (xml/element :side {:move-order     move-order
+                                                                :is-nationality is-nationality?
+                                                                :side-name      side-name
+                                                                :extra-move     extra-move?}
+                                                         (apply xml/element :initial-setup {} (create-initial-setup-xml initial-setup))))))
                             (xml/element :map-configuration {:orientation orientation :direction direction}
                                          (apply xml/element :map-rows {}
-                                                      (doall (for [mr map-rows]
-                                                               (xml/element :map-row {}
-                                                                            (apply xml/element :maps {}
-                                                                                         (doall (for [[present board-id upper-left upper-right lower-left lower-right] mr]
-                                                                                                  (xml/element :map {:present     present
-                                                                                                                     :board-id    board-id
-                                                                                                                     :upper-left  upper-left
-                                                                                                                     :upper-right upper-right
-                                                                                                                     :lower-left  lower-left
-                                                                                                                     :lower-right lower-right}))))))))))
+                                                (doall (for [mr map-rows]
+                                                         (xml/element :map-row {}
+                                                                      (apply xml/element :maps {}
+                                                                             (doall (for [[present board-id upper-left upper-right lower-left lower-right] mr]
+                                                                                      (xml/element :map {:present     present
+                                                                                                         :board-id    board-id
+                                                                                                         :upper-left  upper-left
+                                                                                                         :upper-right upper-right
+                                                                                                         :lower-left  lower-left
+                                                                                                         :lower-right lower-right}))))))))))
                (xml/element :turns {}
                             (xml/element :turn {:number 1}
-                                         (let [{:keys [side-name]} (get sides 0)]
+                                         (let [{:keys [side-name]} (first sides)]
                                            (xml/element :side {:attacker side-name}
                                                         (xml/element :phase {:name "Rally"})))))))
 

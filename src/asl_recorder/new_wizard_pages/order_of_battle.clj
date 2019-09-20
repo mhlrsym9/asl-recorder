@@ -78,7 +78,7 @@
                :counter         counter
                :number-counters number-counters}
         remove-last-from-oob (sc/select r [(build-remove-last-from-oob-pound-id group-number)])]
-    (apply table/insert-at! t entry)
+    (table/insert-at! t (table/row-count t) entry)
     (sc/selection! number-counters-spinner 1)
     (sc/config! remove-last-from-oob :enabled? true)))
 
@@ -128,9 +128,9 @@
                          (sc/scrollable t)]}]
     layout))
 
-(defn- oob-page [group-number number-groups]
-  (let [title (str (u/capital-nth-string group-number) " Order of Battle (OOB) Panel")
-        tip (str "Initial OOB for group " group-number " of " number-groups)]
+(defn- initial-setup-oob-page [group-number number-groups]
+  (let [title (str (u/capital-nth-string group-number) " Setup Order of Battle (OOB) Panel")
+        tip (str "Initial Setup OOB for group " group-number " of " number-groups)]
     (proxy [WizardPage Tag] [title tip]
       (tag_name [] (.getSimpleName WizardPage)))))
 
@@ -138,7 +138,7 @@
   (let [layout (oob-layout group-number sc)
         total-initial-setup-groups (apply + (map :number-initial-setup-groups sc))
         p (sc/abstract-panel
-            (oob-page group-number total-initial-setup-groups)
+            (initial-setup-oob-page group-number total-initial-setup-groups)
             (layout/box-layout :vertical)
             layout)]
     p))
@@ -148,11 +148,17 @@
    :oob (let [t (sc/select p [(build-oob-pound-id group-number)])]
           (table/value-at t (range (table/row-count t))))})
 
+(defn- reinforcement-oob-page [group-number number-groups]
+  (let [title (str (u/capital-nth-string group-number) " Reinforcement Order of Battle (OOB) Panel")
+        tip (str "Reinforcement OOB for group " group-number " of " number-groups)]
+    (proxy [WizardPage Tag] [title tip]
+      (tag_name [] (.getSimpleName WizardPage)))))
+
 (defn reinforcement-oob-panel [group-number sc]
   (let [layout (oob-layout group-number sc)
         total-reinforcement-groups (apply + (map :number-reinforcement-groups sc))
         p (sc/abstract-panel
-            (oob-page group-number total-reinforcement-groups)
+            (reinforcement-oob-page group-number total-reinforcement-groups)
             (layout/box-layout :vertical)
             layout)]
     p))
