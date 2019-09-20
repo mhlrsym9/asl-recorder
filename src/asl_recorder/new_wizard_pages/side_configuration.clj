@@ -117,4 +117,4 @@
 (defn extract-side-configuration [pm]
   (let [p (:side-configuration @pm)
         t (sc/select p [:#side-table])]
-    (table/value-at t (range (table/row-count t)))))
+    (sort-by :move-order (vec (table/value-at t (range (table/row-count t)))))))

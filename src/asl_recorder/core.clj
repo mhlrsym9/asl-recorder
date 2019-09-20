@@ -67,21 +67,22 @@
 (def rout-phase-map {"ATTACKER Rout" {:next-sub-phase "DEFENDER Rout" :transition-fn #'transition-to-defender-rout :open-file-fn #'transition-to-attacker-rout}
                      "DEFENDER Rout" {:next-sub-phase nil :transition-fn #'transition-to-advance :open-file-fn #'transition-to-defender-rout}})
 
-(defn create-initial-setup-xml [id initial-setup]
-  (xml/element id {} (doall (for [[unique-id position covered-arc] initial-setup]
-                              (xml/element :setup (merge {:unique-id unique-id :position position}
-                                                         (when-not (str/blank? covered-arc)
-                                                           {:covered-arc covered-arc})))))))
+(defn create-initial-setup-xml [initial-setup]
+  (doall (for [{:keys [unique-id position covered-arc]} initial-setup]
+           (xml/element :setup (merge {:unique-id unique-id :position position}
+                                      (when-not (str/blank? covered-arc)
+                                        {:covered-arc covered-arc}))))))
 
-(defn create-game-start-xml [name rule-set number-turns sides orientation direction map-rows side2-initial-setup side1-initial-setup]
+(defn create-game-start-xml [name rule-set number-turns sides orientation direction map-rows]
   (xml/element :game {}
                (xml/element :scenario {:name name :rule-set rule-set :number-full-turns number-turns}
                             (apply xml/element :sides {}
-                                         (doall (for [{:keys [move-order is-nationality? side-name extra-move?]} sides]
+                                         (doall (for [{:keys [move-order is-nationality? side-name extra-move? initial-setup]} sides]
                                                   (xml/element :side {:move-order      move-order
                                                                       :is-nationality? is-nationality?
                                                                       :side-name       side-name
-                                                                      :extra-move?     extra-move?}))))
+                                                                      :extra-move?     extra-move?}
+                                                               (apply xml/element :initial-setup {} (create-initial-setup-xml initial-setup))))))
                             (xml/element :map-configuration {:orientation orientation :direction direction}
                                          (apply xml/element :map-rows {}
                                                       (doall (for [mr map-rows]
@@ -93,9 +94,7 @@
                                                                                                                      :upper-left  upper-left
                                                                                                                      :upper-right upper-right
                                                                                                                      :lower-left  lower-left
-                                                                                                                     :lower-right lower-right})))))))))
-                            (create-initial-setup-xml :side2-initial-setup side2-initial-setup)
-                            (create-initial-setup-xml :side1-initial-setup side1-initial-setup))
+                                                                                                                     :lower-right lower-right}))))))))))
                (xml/element :turns {}
                             (xml/element :turn {:number 1}
                                          (let [{:keys [side-name]} (get sides 0)]
@@ -103,9 +102,11 @@
                                                         (xml/element :phase {:name "Rally"})))))))
 
 (def game-start (create-game-start-xml "War of the Rats" "asl-sk" 6
-                                       [{:move-order 1 :is-nationality? true :side-name "German" :extra-move? false}
-                                        {:move-order 2 :is-nationality? true :side-name "Russian" :extra-move? false}]
-                                       "horizontal" "up" [[[true "z" false false true false]]] [["1.A" "zA1"]] []))
+                                       [{:move-order 1 :is-nationality? true :side-name "German" :extra-move? false
+                                         :initial-setup [{:unique-id "1.A" :position "zA1"}]}
+                                        {:move-order 2 :is-nationality? true :side-name "Russian" :extra-move? false
+                                         :initial-setup []}]
+                                       "horizontal" "up" [[[true "z" false false true false]]]))
 
 (defn initial-game-zip-loc [the-xml]
   (-> the-xml
@@ -1064,10 +1065,8 @@
 (defn- create-new-game [d]
   (let [{:keys [side-configuration]
          {:keys [name rule-set nt]} :basic-configuration
-         {:keys [orientation direction map-rows]} :map-configuration} (nw/extract-wizard-data)
-        side2-initial-setup (nw/extract-side2-initial-setup d)
-        side1-initial-setup (nw/extract-side1-initial-setup d)]
-    (swap! the-game assoc :game-zip-loc (initial-game-zip-loc (create-game-start-xml name rule-set nt side-configuration orientation direction map-rows side2-initial-setup side1-initial-setup))
+         {:keys [orientation direction map-rows]} :map-configuration} (nw/extract-wizard-data)]
+    (swap! the-game assoc :game-zip-loc (initial-game-zip-loc (create-game-start-xml name rule-set nt side-configuration orientation direction map-rows))
            :is-modified? true
            :file nil)))
 
