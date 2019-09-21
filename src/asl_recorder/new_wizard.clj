@@ -22,7 +22,7 @@
 ; as each panel is created, the code adds a reference to the actual current panel into
 ; this stateful map (argh!). When the data is extracted, the code uses these references
 ; instead of the dialog root to extract the data in the last instance of each panel.
-(def ^{:private true} panel-map (atom {:basic-configuration nil :optional-rules nil :map-configuration nil :initial-setup-oob [] :initial-setup [] :reinforcement-oob []}))
+(def ^{:private true} panel-map (atom {:basic-configuration nil :optional-rules nil :map-configuration nil :initial-setup-oob [] :initial-setup [] :reinforcements-oob []}))
 
 (def new-wizard-page-factory
   (reify PageFactory
@@ -45,7 +45,7 @@
                           total-initial-setup-groups (apply + (map :number-initial-setup-groups side-configuration))
                           total-reinforcement-groups (apply + (map :number-reinforcement-groups side-configuration))]
                       (cond (< c (+ 4 (* 2 total-initial-setup-groups)))
-                            (let [group-number (inc (/ (- c 4) 2))]
+                            (let [group-number (quot (- c 4) 2)]
                               (if (even? c)
                                 (let [isop (oob/initial-setup-oob-panel group-number side-configuration)]
                                   (swap! panel-map assoc-in [:initial-setup-oob group-number] isop)
@@ -54,7 +54,7 @@
                                   (swap! panel-map assoc-in [:initial-setup group-number] isp)
                                   isp)))
                             (< c (+ 4 (* 2 total-initial-setup-groups) total-reinforcement-groups))
-                            (let [group-number (inc (- c 4 (* 2 total-initial-setup-groups)))
+                            (let [group-number (- c 4 (* 2 total-initial-setup-groups))
                                   rop (oob/reinforcement-oob-panel group-number side-configuration)]
                               (swap! panel-map assoc-in [:reinforcements-oob group-number] rop)
                               rop)

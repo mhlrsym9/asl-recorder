@@ -128,9 +128,9 @@
                          (sc/scrollable t)]}]
     layout))
 
-(defn- initial-setup-oob-page [group-number number-groups]
-  (let [title (str (u/capital-nth-string group-number) " Setup Order of Battle (OOB) Panel")
-        tip (str "Initial Setup OOB for group " group-number " of " number-groups)]
+(defn- initial-setup-oob-page [displayed-group-number number-groups]
+  (let [title (str (u/capital-nth-string displayed-group-number) " Setup Order of Battle (OOB) Panel")
+        tip (str "Initial Setup OOB for group " displayed-group-number " of " number-groups)]
     (proxy [WizardPage Tag] [title tip]
       (tag_name [] (.getSimpleName WizardPage)))))
 
@@ -138,7 +138,7 @@
   (let [layout (oob-layout group-number sc)
         total-initial-setup-groups (apply + (map :number-initial-setup-groups sc))
         p (sc/abstract-panel
-            (initial-setup-oob-page group-number total-initial-setup-groups)
+            (initial-setup-oob-page (inc group-number) total-initial-setup-groups)
             (layout/box-layout :vertical)
             layout)]
     p))
@@ -158,7 +158,7 @@
   (let [layout (oob-layout group-number sc)
         total-reinforcement-groups (apply + (map :number-reinforcement-groups sc))
         p (sc/abstract-panel
-            (reinforcement-oob-page group-number total-reinforcement-groups)
+            (reinforcement-oob-page (inc group-number) total-reinforcement-groups)
             (layout/box-layout :vertical)
             layout)]
     p))

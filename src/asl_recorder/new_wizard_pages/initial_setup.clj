@@ -94,9 +94,11 @@
                          (sc/scrollable t)]}]
     {:add-to-setup-button add-to-setup-button :remove-last-from-setup-button remove-last-from-setup-button :layout layout}))
 
-(defn- initial-setup-page [setup-panel-index number-setup-panels]
-  (let [title (str "Setup Panel " (inc setup-panel-index))
-        tip (str "Initial positions for all units in group " (u/nth-string (inc setup-panel-index)) " of " number-setup-panels ".")]
+(defn- initial-setup-page [displayed-setup-panel-number number-setup-panels]
+  (let [title (str "Setup Panel " displayed-setup-panel-number)
+        tip (str "Initial positions for all units in group "
+                 (u/nth-string displayed-setup-panel-number)
+                 " of " number-setup-panels ".")]
     (proxy [WizardPage Tag] [title tip]
       (tag_name [] (.getSimpleName WizardPage)))))
 
@@ -104,7 +106,7 @@
   (let [{:keys [add-to-setup-button remove-last-from-setup-button layout]} (initial-setup-layout setup-panel-index)
         total-initial-setup-groups (apply + (map :number-initial-setup-groups sc))
         p (sc/abstract-panel
-            (initial-setup-page setup-panel-index total-initial-setup-groups)
+            (initial-setup-page (inc setup-panel-index) total-initial-setup-groups)
             (layout/box-layout :vertical)
             layout)]
     (sc/listen add-to-setup-button :action (partial add-to-setup-action setup-panel-index p))
