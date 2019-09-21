@@ -25,10 +25,10 @@
 (def ^{:private true} panel-map (atom {:basic-configuration nil :optional-rules nil :map-configuration nil :initial-setup-oob [] :initial-setup [] :reinforcements-oob []}))
 
 (defn- extract-initial-setup-oobs []
-  (map-indexed (fn [idx itm] (oob/extract-initial-setup-oob itm idx)) (:initial-setup-oob panel-map)))
+  (map-indexed (fn [idx itm] (oob/extract-initial-setup-oob itm idx)) (:initial-setup-oob @panel-map)))
 
 (defn- extract-reinforcements-oobs []
-  (map-indexed (fn [idx itm] (oob/extract-reinforcement-oob itm idx)) (:reinforcements-oob panel-map)))
+  (map-indexed (fn [idx itm] (oob/extract-reinforcement-oob itm idx)) (:reinforcements-oob @panel-map)))
 
 (defn- extract-side-names-remaining [sc k extract-fn]
   (let [total-side-name-frequencies (apply hash-map (mapcat (fn [side] [(:side-name side) (k side)]) sc))
@@ -52,7 +52,7 @@
               (= 3 c) (let [scp (side/side-configuration-panel)]
                         (swap! panel-map assoc :side-configuration scp)
                         scp)
-              :else (let [side-configuration (side/extract-side-configuration panel-map)
+              :else (let [side-configuration (side/extract-side-configuration (:side-configuration @panel-map))
                           side-names-remaining-for-initial-setup-oobs (extract-side-names-remaining side-configuration :number-initial-setup-groups extract-initial-setup-oobs)
                           total-initial-setup-groups (apply + (map :number-initial-setup-groups side-configuration))
                           total-reinforcement-groups (apply + (map :number-reinforcement-groups side-configuration))]
@@ -74,14 +74,14 @@
                             :else (final/final-panel))))))))
 
 (defn extract-wizard-data []
-  {:basic-configuration (basic/extract-basic-configuration panel-map)
-   :optional-rules      (optional/extract-optional-rules panel-map)
-   :map-configuration   (map/extract-map-configuration panel-map)
+  {:basic-configuration (basic/extract-basic-configuration (:basic-configuration @panel-map))
+   :optional-rules      (optional/extract-optional-rules (:optional-rules @panel-map))
+   :map-configuration   (map/extract-map-configuration (:map-configuration @panel-map))
    :side-configuration  (let [initial-setup-oobs (extract-initial-setup-oobs)
-                              initial-setups (map-indexed (fn [idx itm] (is/extract-initial-setup itm idx)) (:initial-setup panel-map))
+                              initial-setups (map-indexed (fn [idx itm] (is/extract-initial-setup itm idx)) (:initial-setup @panel-map))
                               side-setups (map #({:side-name (:side-name %1) :initial-setup %2}) initial-setup-oobs initial-setups)]
                           (map (fn [{:keys [side-name] :as sc}] (assoc sc :initial-setup
                                                                           (apply concat (map :initial-setup
                                                                                              (filter #(= side-name (:side-name %))
                                                                                                      side-setups)))))
-                               (side/extract-side-configuration panel-map)))})
+                               (side/extract-side-configuration (:side-configuration @panel-map))))})

@@ -19,9 +19,8 @@
                       :fill-v]})]
     p))
 
-(defn extract-optional-rules [pm]
-  (let [p (:optional-rules @pm)
-        iift? (sc/selection (sc/select p [:#use-iift?]))
+(defn extract-optional-rules [p]
+  (let [iift? (sc/selection (sc/select p [:#use-iift?]))
         battlefield-integrity? (sc/selection (sc/select p [:#use-battlefield-integrity?]))]
     {:iift? iift? :battlefield-integrity? battlefield-integrity?}))
 

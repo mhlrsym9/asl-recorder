@@ -45,17 +45,15 @@
     (dorun (map #(maximum-size-fn [%]) [:#name :#number-turns]))
     p))
 
-(defn- is-asl-selected? [pm]
-  (let [p (:basic-configuration @pm)]
-    (sc/selection (sc/select p [:#asl]))))
+(defn- is-asl-selected? [p]
+  (sc/selection (sc/select p [:#asl])))
 
-(defn- extract-rule-set [pm]
-  (if (is-asl-selected? pm) "asl" "asl-sk"))
+(defn- extract-rule-set [p]
+  (if (is-asl-selected? p) "asl" "asl-sk"))
 
-(defn extract-basic-configuration [pm]
-  (let [p (:basic-configuration @pm)
-        name (sc/text (sc/select p [:#name]))
-        rule-set (extract-rule-set pm)
+(defn extract-basic-configuration [p]
+  (let [name (sc/text (sc/select p [:#name]))
+        rule-set (extract-rule-set p)
         nt (sc/selection (sc/select p [:#number-turns]))]
     {:name name :rule-set rule-set :nt nt}))
 

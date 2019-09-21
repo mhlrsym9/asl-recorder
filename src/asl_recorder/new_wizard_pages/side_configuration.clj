@@ -114,7 +114,6 @@
             layout)]
     p))
 
-(defn extract-side-configuration [pm]
-  (let [p (:side-configuration @pm)
-        t (sc/select p [:#side-table])]
+(defn extract-side-configuration [p]
+  (let [t (sc/select p [:#side-table])]
     (sort-by :move-order (vec (table/value-at t (range (table/row-count t)))))))

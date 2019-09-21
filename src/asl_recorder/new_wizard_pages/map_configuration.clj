@@ -88,20 +88,17 @@
                       (sc/scrollable t)]})]
     p))
 
-(defn- extract-orientation [pm]
-  (let [p (:map-configuration @pm)]
-    (if (sc/selection (sc/select p [:#vertical-orientation])) "Vertical" "Horizontal")))
+(defn- extract-orientation [p]
+  (if (sc/selection (sc/select p [:#vertical-orientation])) "Vertical" "Horizontal"))
 
-(defn- extract-direction [pm]
-  (let [p (:map-configuration @pm)]
-    (cond (sc/selection (sc/select p [:#up-direction])) "up"
-          (sc/selection (sc/select p [:#right-direction])) "right"
-          (sc/selection (sc/select p [:#down-direction])) "down"
-          :else "left")))
+(defn- extract-direction [p]
+  (cond (sc/selection (sc/select p [:#up-direction])) "up"
+        (sc/selection (sc/select p [:#right-direction])) "right"
+        (sc/selection (sc/select p [:#down-direction])) "down"
+        :else "left"))
 
-(defn- extract-map-rows-from-wizard [pm]
-  (let [p (:map-configuration @pm)
-        t (sc/select p [:#map-table])
+(defn- extract-map-rows-from-wizard [p]
+  (let [t (sc/select p [:#map-table])
         number-columns (-> p (sc/select [:#number-columns]) sc/selection)
         tm (sc/config t :model)
         c (.getColumnCount tm)
@@ -109,9 +106,9 @@
                    (map #(.getValueAt tm i %) (range 2 c)))]
     (partition number-columns the-maps)))
 
-(defn extract-map-configuration [pm]
-  {:orientation (extract-orientation pm)
-   :direction (extract-direction pm)
-   :map-rows (extract-map-rows-from-wizard pm)})
+(defn extract-map-configuration [p]
+  {:orientation (extract-orientation p)
+   :direction (extract-direction p)
+   :map-rows (extract-map-rows-from-wizard p)})
 
 

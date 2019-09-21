@@ -27,11 +27,17 @@
                 (recur (zip/next loc) (conj units (zip-xml/text loc)))
                 (recur (zip/next loc) units)))))))))
 
-(defn build-id [key side]
-  (keyword (str key side)))
+(defn build-id
+  ([key side]
+   (keyword (str key side)))
+  ([key side suffix]
+   (keyword (str key side "-" suffix))))
 
-(defn build-pound-id [key side]
-  (keyword (str "#" key side)))
+(defn build-pound-id
+  ([key side]
+   (keyword (str "#" key side)))
+  ([key side suffix]
+   (keyword (str "#" key side "-" suffix))))
 
 (defn nth-string [n]
   (cond (= 1 n) "first"
