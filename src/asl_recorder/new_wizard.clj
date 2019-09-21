@@ -24,6 +24,17 @@
 ; instead of the dialog root to extract the data in the last instance of each panel.
 (def ^{:private true} panel-map (atom {:basic-configuration nil :optional-rules nil :map-configuration nil :initial-setup-oob [] :initial-setup [] :reinforcements-oob []}))
 
+(defn- extract-initial-setup-oobs []
+  (map-indexed (fn [idx itm] (oob/extract-initial-setup-oob itm idx)) (:initial-setup-oob panel-map)))
+
+(defn- extract-reinforcements-oobs []
+  (map-indexed (fn [idx itm] (oob/extract-reinforcement-oob itm idx)) (:reinforcements-oob panel-map)))
+
+(defn- extract-side-names-remaining [sc k extract-fn]
+  (let [total-side-name-frequencies (apply hash-map (mapcat (fn [side] [(:side-name side) (k side)]) sc))
+        side-names-used-in-oobs-frequencies (frequencies (map :side-name (extract-fn)))]
+    (keys (filter (fn [[k v]] (not= v (get side-names-used-in-oobs-frequencies k 0))) total-side-name-frequencies))))
+
 (def new-wizard-page-factory
   (reify PageFactory
     (isTransient [_ _ _] false)
@@ -42,12 +53,13 @@
                         (swap! panel-map assoc :side-configuration scp)
                         scp)
               :else (let [side-configuration (side/extract-side-configuration panel-map)
+                          side-names-remaining-for-initial-setup-oobs (extract-side-names-remaining side-configuration :number-initial-setup-groups extract-initial-setup-oobs)
                           total-initial-setup-groups (apply + (map :number-initial-setup-groups side-configuration))
                           total-reinforcement-groups (apply + (map :number-reinforcement-groups side-configuration))]
                       (cond (< c (+ 4 (* 2 total-initial-setup-groups)))
                             (let [group-number (quot (- c 4) 2)]
                               (if (even? c)
-                                (let [isop (oob/initial-setup-oob-panel group-number side-configuration)]
+                                (let [isop (oob/initial-setup-oob-panel group-number side-configuration side-names-remaining-for-initial-setup-oobs)]
                                   (swap! panel-map assoc-in [:initial-setup-oob group-number] isop)
                                   isop)
                                 (let [isp (is/initial-setup-panel group-number side-configuration)]
@@ -55,7 +67,8 @@
                                   isp)))
                             (< c (+ 4 (* 2 total-initial-setup-groups) total-reinforcement-groups))
                             (let [group-number (- c 4 (* 2 total-initial-setup-groups))
-                                  rop (oob/reinforcement-oob-panel group-number side-configuration)]
+                                  side-names-remaining-for-reinforcement-oobs (extract-side-names-remaining side-configuration :number-reinforcement-groups extract-reinforcements-oobs)
+                                  rop (oob/reinforcement-oob-panel group-number side-configuration side-names-remaining-for-reinforcement-oobs)]
                               (swap! panel-map assoc-in [:reinforcements-oob group-number] rop)
                               rop)
                             :else (final/final-panel))))))))
@@ -64,7 +77,7 @@
   {:basic-configuration (basic/extract-basic-configuration panel-map)
    :optional-rules      (optional/extract-optional-rules panel-map)
    :map-configuration   (map/extract-map-configuration panel-map)
-   :side-configuration  (let [initial-setup-oobs (map-indexed (fn [idx itm] (oob/extract-initial-setup-oob itm idx)) (:initial-setup-oob panel-map))
+   :side-configuration  (let [initial-setup-oobs (extract-initial-setup-oobs)
                               initial-setups (map-indexed (fn [idx itm] (is/extract-initial-setup itm idx)) (:initial-setup panel-map))
                               side-setups (map #({:side-name (:side-name %1) :initial-setup %2}) initial-setup-oobs initial-setups)]
                           (map (fn [{:keys [side-name] :as sc}] (assoc sc :initial-setup

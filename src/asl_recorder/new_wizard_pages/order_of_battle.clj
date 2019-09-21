@@ -88,17 +88,18 @@
     (table/remove-at! t (- (table/row-count t) 1))
     (sc/config! remove-last-from-oob :enabled? (< 0 (table/row-count t)))))
 
-(defn- oob-layout [group-number sc]
+(defn- oob-layout [group-number sc side-names-remaining]
   (let [t (sc/table :id (build-oob-id group-number) :model [:columns [:nationality :counter :number-counters]])
-        sides (map :side-name sc)
         side (sc/combobox :id (build-side-group-id group-number)
-                          :model sides
+                          :model side-names-remaining
                           :listen [:action (fn [_] (update-nationality-selection group-number sc t))])
         nationalities (u/extract-nationalities)
         nationality (sc/combobox :id (build-nationality-id group-number)
                                  :model nationalities
-                                 :selected-item (let [is-nationality? (:is-nationality? (first sc))]
-                                                  (if is-nationality? (:side-name (first sc)) (first nationalities)))
+                                 :selected-item (let [first-side-name (first side-names-remaining)
+                                                      side-matching-side-name (first (filter #(= (:side-name %) first-side-name) sc))
+                                                      is-nationality? (:is-nationality? side-matching-side-name)]
+                                                  (if is-nationality? first-side-name (first nationalities)))
                                  :listen [:action (fn [_] (update-counter-model group-number t))])
         counter-type (sc/combobox :id (build-counter-type-id group-number)
                                   :model ["Infantry" "Support Weapon" "Gun" "Vehicle" "Fortification" "Concealment"]
@@ -134,8 +135,8 @@
     (proxy [WizardPage Tag] [title tip]
       (tag_name [] (.getSimpleName WizardPage)))))
 
-(defn initial-setup-oob-panel [group-number sc]
-  (let [layout (oob-layout group-number sc)
+(defn initial-setup-oob-panel [group-number sc side-names-remaining]
+  (let [layout (oob-layout group-number sc side-names-remaining)
         total-initial-setup-groups (apply + (map :number-initial-setup-groups sc))
         p (sc/abstract-panel
             (initial-setup-oob-page (inc group-number) total-initial-setup-groups)
@@ -144,7 +145,7 @@
     p))
 
 (defn extract-initial-setup-oob [p group-number]
-  {:side (sc/selection (sc/select p [(build-side-group-pound-id group-number)]))
+  {:side-name (sc/selection (sc/select p [(build-side-group-pound-id group-number)]))
    :oob (let [t (sc/select p [(build-oob-pound-id group-number)])]
           (table/value-at t (range (table/row-count t))))})
 
@@ -154,12 +155,17 @@
     (proxy [WizardPage Tag] [title tip]
       (tag_name [] (.getSimpleName WizardPage)))))
 
-(defn reinforcement-oob-panel [group-number sc]
-  (let [layout (oob-layout group-number sc)
+(defn reinforcement-oob-panel [group-number sc side-names-remaining]
+  (let [layout (oob-layout group-number sc side-names-remaining)
         total-reinforcement-groups (apply + (map :number-reinforcement-groups sc))
         p (sc/abstract-panel
             (reinforcement-oob-page (inc group-number) total-reinforcement-groups)
             (layout/box-layout :vertical)
             layout)]
     p))
+
+(defn extract-reinforcement-oob [p group-number]
+  {:side-name (sc/selection (sc/select p [(build-side-group-pound-id group-number)]))
+   :oob (let [t (sc/select p [(build-oob-pound-id group-number)])]
+          (table/value-at t (range (table/row-count t))))})
 
