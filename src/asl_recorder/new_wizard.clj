@@ -53,16 +53,19 @@
                         (swap! panel-map assoc :side-configuration scp)
                         scp)
               :else (let [side-configuration (side/extract-side-configuration (:side-configuration @panel-map))
-                          side-names-remaining-for-initial-setup-oobs (extract-side-names-remaining side-configuration :number-initial-setup-groups extract-initial-setup-oobs)
                           total-initial-setup-groups (apply + (map :number-initial-setup-groups side-configuration))
                           total-reinforcement-groups (apply + (map :number-reinforcement-groups side-configuration))]
                       (cond (< c (+ 4 (* 2 total-initial-setup-groups)))
                             (let [group-number (quot (- c 4) 2)]
                               (if (even? c)
-                                (let [isop (oob/initial-setup-oob-panel group-number side-configuration side-names-remaining-for-initial-setup-oobs)]
+                                (let [side-names-remaining-for-initial-setup-oobs (extract-side-names-remaining side-configuration :number-initial-setup-groups extract-initial-setup-oobs)
+                                      isop (oob/initial-setup-oob-panel group-number side-configuration side-names-remaining-for-initial-setup-oobs)]
                                   (swap! panel-map assoc-in [:initial-setup-oob group-number] isop)
                                   isop)
-                                (let [isp (is/initial-setup-panel group-number side-configuration)]
+                                (let [isp (is/initial-setup-panel group-number side-configuration
+                                                                  (map/extract-map-configuration (:map-configuration @panel-map))
+                                                                  (:oob (oob/extract-initial-setup-oob (get-in @panel-map [:initial-setup-oob group-number])
+                                                                                                       group-number)))]
                                   (swap! panel-map assoc-in [:initial-setup group-number] isp)
                                   isp)))
                             (< c (+ 4 (* 2 total-initial-setup-groups) total-reinforcement-groups))
