@@ -5,66 +5,102 @@
   (:import [com.github.cjwizard WizardPage]
            (seesaw.selector Tag)))
 
-(defn- build-setup-counter-id [side]
-  (u/build-id "setup-counter-type-id" side))
+(defn- build-setup-nationality-id [setup-panel-index]
+  (u/build-id "setup-nationality-id" setup-panel-index))
 
-(defn- build-setup-counter-pound-id [side]
-  (u/build-pound-id "setup-counter-type-id" side))
+(defn- build-setup-nationality-pound-id [setup-panel-index]
+  (u/build-pound-id "setup-nationality-id" setup-panel-index))
 
-(defn- build-unique-id [side]
-  (u/build-id "unique-id" side))
+(defn- build-setup-counter-id [setup-panel-index]
+  (u/build-id "setup-counter-id" setup-panel-index))
 
-(defn- build-unique-pound-id [side]
-  (u/build-pound-id "unique-id" side))
+(defn- build-setup-counter-pound-id [setup-panel-index]
+  (u/build-pound-id "setup-counter-id" setup-panel-index))
 
-(defn- build-position-id [side]
-  (u/build-id "position-id" side))
+(defn- build-unique-id [setup-panel-index]
+  (u/build-id "unique-id" setup-panel-index))
 
-(defn- build-position-pound-id [side]
-  (u/build-pound-id "position-id" side))
+(defn- build-unique-pound-id [setup-panel-index]
+  (u/build-pound-id "unique-id" setup-panel-index))
 
-(defn- build-covered-arc-id [side]
-  (u/build-id "covered-arc-id" side))
+(defn- build-position-id [setup-panel-index]
+  (u/build-id "position-id" setup-panel-index))
 
-(defn- build-covered-arc-pound-id [side]
-  (u/build-pound-id "covered-arc-id" side))
+(defn- build-position-pound-id [setup-panel-index]
+  (u/build-pound-id "position-id" setup-panel-index))
 
-(defn- build-turret-covered-arc-id [side]
-  (u/build-id "turret-covered-arc-id" side))
+(defn- build-covered-arc-id [setup-panel-index]
+  (u/build-id "covered-arc-id" setup-panel-index))
 
-(defn- build-turret-covered-arc-pound-id [side]
-  (u/build-pound-id "turret-covered-arc-id" side))
+(defn- build-covered-arc-pound-id [setup-panel-index]
+  (u/build-pound-id "covered-arc-id" setup-panel-index))
 
-(defn- build-setup-id [side]
-  (u/build-id "setup-id" side))
+(defn- build-turret-covered-arc-id [setup-panel-index]
+  (u/build-id "turret-covered-arc-id" setup-panel-index))
 
-(defn- build-setup-pound-id [side]
-  (u/build-pound-id "setup-id" side))
+(defn- build-turret-covered-arc-pound-id [setup-panel-index]
+  (u/build-pound-id "turret-covered-arc-id" setup-panel-index))
 
-(defn- build-add-to-setup-id [side]
-  (u/build-id "add-to-setup" side))
+(defn- build-setup-id [setup-panel-index]
+  (u/build-id "setup-id" setup-panel-index))
 
-(defn- build-add-to-setup-pound-id [side]
-  (u/build-pound-id "add-to-setup" side))
+(defn- build-setup-pound-id [setup-panel-index]
+  (u/build-pound-id "setup-id" setup-panel-index))
 
-(defn- build-remove-last-from-setup-id [side]
-  (u/build-id "remove-last-from-setup" side))
+(defn- build-add-to-setup-id [setup-panel-index]
+  (u/build-id "add-to-setup" setup-panel-index))
 
-(defn- build-remove-last-from-setup-pound-id [side]
-  (u/build-pound-id "remove-last-from-setup" side))
+(defn- build-add-to-setup-pound-id [setup-panel-index]
+  (u/build-pound-id "add-to-setup" setup-panel-index))
 
-(defn- extract-all-counters-from-oob [oob]
-  (into (hash-map) (map (fn [{:keys [counter number-counters]}] (hash-map counter number-counters)) oob)))
+(defn- build-remove-last-from-setup-id [setup-panel-index]
+  (u/build-id "remove-last-from-setup" setup-panel-index))
 
-(defn- update-counter-model [panel-idx oob t]
+(defn- build-remove-last-from-setup-pound-id [setup-panel-index]
+  (u/build-pound-id "remove-last-from-setup" setup-panel-index))
+
+(defn- extract-all-nationalities-from-oob [oob]
+  (apply merge-with + (map (fn [{:keys [nationality number-counters]}]
+                             (hash-map nationality number-counters))
+                           oob)))
+
+(defn- extract-all-counters-from-oob [oob current-nationality]
+  (apply merge-with +
+         (filter identity (map (fn [{:keys [nationality counter number-counters]}]
+                                 (when (= nationality current-nationality)
+                                   (hash-map counter number-counters)))
+                               oob))))
+
+(defn- update-nationality-model [setup-panel-index oob t]
   (let [r (sc/to-root t)
-        counter (-> r (sc/select [(build-setup-counter-pound-id panel-idx)]))
-        all-counters-from-oob (extract-all-counters-from-oob oob)
-        all-counters-setup (frequencies (map :counter (table/value-at t (range (table/row-count t)))))
+        nationality (-> r (sc/select [(build-setup-nationality-pound-id setup-panel-index)]))
+        selected-nationality (sc/selection nationality)
+        all-nationalities-from-oob (extract-all-nationalities-from-oob oob)
+        all-nationalities-setup (frequencies (map :nationality (table/value-at t (range (table/row-count t)))))
+        nationalities-still-available (filter identity (map (fn [[k v]] (let [number-setup (get all-nationalities-setup k 0)]
+                                                                          (when (< number-setup v) k)))
+                                                            all-nationalities-from-oob))]
+    (sc/config! nationality :model nationalities-still-available)
+    (if (some #{selected-nationality} nationalities-still-available)
+      (sc/selection! nationality selected-nationality)
+      (sc/selection! nationality 0))))
+
+(defn- update-counter-model [setup-panel-index oob t]
+  (let [r (sc/to-root t)
+        nationality (sc/select r [(build-setup-nationality-pound-id setup-panel-index)])
+        selected-nationality (sc/selection nationality)
+        counter (sc/select r [(build-setup-counter-pound-id setup-panel-index)])
+        selected-counter (sc/selection counter)
+        all-counters-from-oob (extract-all-counters-from-oob oob selected-nationality)
+        all-counters-setup (frequencies (map :counter (filter #(= selected-nationality (:nationality %))
+                                                              (table/value-at t (range (table/row-count t))))))
         counters-still-available (filter identity (map (fn [[k v]] (let [number-setup (get all-counters-setup k 0)]
                                                                      (when (< number-setup v) k)))
                                                        all-counters-from-oob))]
-    (sc/config! counter :model counters-still-available)))
+    (sc/config! counter :model counters-still-available)
+    (if (some #{selected-counter} counters-still-available)
+      (sc/selection! counter selected-counter)
+      (sc/selection! counter 0))))
 
 (defn- add-to-setup-enabled? [unique-pound-id position-pound-id e]
   (let [r (sc/to-root e)
@@ -73,40 +109,46 @@
     (and (-> s1 str/blank? not)
          (-> s2 str/blank? not))))
 
-(defn- configure-add-to-setup-enabled-state [side t]
+(defn- configure-add-to-setup-enabled-state [setup-panel-index t]
   (let [r (sc/to-root t)
-        add-to-oob (sc/select r [(build-add-to-setup-pound-id side)])]
-    (sc/config! add-to-oob :enabled? (add-to-setup-enabled? (build-unique-pound-id side) (build-position-pound-id side) t))))
+        add-to-oob (sc/select r [(build-add-to-setup-pound-id setup-panel-index)])]
+    (sc/config! add-to-oob :enabled? (add-to-setup-enabled? (build-unique-pound-id setup-panel-index)
+                                                            (build-position-pound-id setup-panel-index)
+                                                            t))))
 
-(defn- add-to-setup-action [side oob t]
+(defn- add-to-setup-action [setup-panel-index oob t]
   (let [r (sc/to-root t)
-        counter (sc/select r [(build-setup-counter-pound-id side)])
-        unique-id (sc/select r [(build-unique-pound-id side)])
-        position (sc/select r [(build-position-pound-id side)])
-        covered-arc (sc/select r [(build-covered-arc-pound-id side)])
-        turret-covered-arc (sc/select r [(build-turret-covered-arc-pound-id side)])
-        remove-last-from-oob (sc/select r [(build-remove-last-from-setup-pound-id side)])]
-    (table/insert-at! t (table/row-count t) {:counter (sc/selection counter)
+        nationality (sc/select r [(build-setup-nationality-pound-id setup-panel-index)])
+        counter (sc/select r [(build-setup-counter-pound-id setup-panel-index)])
+        unique-id (sc/select r [(build-unique-pound-id setup-panel-index)])
+        position (sc/select r [(build-position-pound-id setup-panel-index)])
+        covered-arc (sc/select r [(build-covered-arc-pound-id setup-panel-index)])
+        turret-covered-arc (sc/select r [(build-turret-covered-arc-pound-id setup-panel-index)])
+        remove-last-from-oob (sc/select r [(build-remove-last-from-setup-pound-id setup-panel-index)])]
+    (table/insert-at! t (table/row-count t) {:nationality (sc/selection nationality)
+                                             :counter (sc/selection counter)
                                              :unique-id (sc/text unique-id)
                                              :position (sc/text position)
                                              :covered-arc (sc/text covered-arc)
                                              :turret-covered-arc (sc/text turret-covered-arc)})
-    (update-counter-model side oob t)
+    (update-nationality-model setup-panel-index oob t)
+    (update-counter-model setup-panel-index oob t)
     (sc/config! remove-last-from-oob :enabled? true)
     (sc/text! unique-id "")
     (sc/text! position "")
     (sc/text! covered-arc "")
     (sc/text! turret-covered-arc "")))
 
-(defn- remove-last-from-setup-action [side oob t]
+(defn- remove-last-from-setup-action [setup-panel-index oob t]
   (let [r (sc/to-root t)
-        unique-id (sc/select r [(build-unique-pound-id side)])
-        position (sc/select r [(build-position-pound-id side)])
-        covered-arc (sc/select r [(build-covered-arc-pound-id side)])
-        turret-covered-arc (sc/select r [(build-turret-covered-arc-pound-id side)])
-        remove-last-from-oob (sc/select r [(build-remove-last-from-setup-pound-id side)])]
+        unique-id (sc/select r [(build-unique-pound-id setup-panel-index)])
+        position (sc/select r [(build-position-pound-id setup-panel-index)])
+        covered-arc (sc/select r [(build-covered-arc-pound-id setup-panel-index)])
+        turret-covered-arc (sc/select r [(build-turret-covered-arc-pound-id setup-panel-index)])
+        remove-last-from-oob (sc/select r [(build-remove-last-from-setup-pound-id setup-panel-index)])]
     (table/remove-at! t (- (table/row-count t) 1))
-    (update-counter-model side oob t)
+    (update-nationality-model setup-panel-index oob t)
+    (update-counter-model setup-panel-index oob t)
     (sc/config! remove-last-from-oob :enabled? (< 0 (table/row-count t)))
     (sc/text! unique-id "")
     (sc/text! position "")
@@ -114,9 +156,12 @@
     (sc/text! turret-covered-arc "")))
 
 (defn- initial-setup-layout [setup-panel-index oob]
-  (let [t (sc/table :id (build-setup-id setup-panel-index) :model [:columns [:counter :unique-id :position :covered-arc :turret-covered-arc]])
+  (let [t (sc/table :id (build-setup-id setup-panel-index) :model [:columns [:nationality :counter :unique-id :position :covered-arc :turret-covered-arc]])
+        nationalities (keys (extract-all-nationalities-from-oob oob))
+        nationality (sc/combobox :id (build-setup-nationality-id setup-panel-index)
+                                 :model nationalities)
         counter (sc/combobox :id (build-setup-counter-id setup-panel-index)
-                             :model (keys (extract-all-counters-from-oob oob)))
+                             :model (keys (extract-all-counters-from-oob oob (first nationalities))))
         unique-id-text (sc/text :id (build-unique-id setup-panel-index)
                                 :listen [:document (fn [_] (configure-add-to-setup-enabled-state setup-panel-index t))])
         position-text (sc/text :id (build-position-id setup-panel-index)
@@ -131,12 +176,16 @@
                                                  :text "Remove last from OoB" :enabled? false
                                                  :listen [:action (fn [_] (remove-last-from-setup-action setup-panel-index oob t))])
         layout {:border 5
-                :items  [(sc/horizontal-panel :items ["Counter: " counter])
+                :items  [(sc/horizontal-panel :items ["Nationality: " nationality
+                                                      [:fill-h 10]
+                                                      "Counter: " counter])
                          [:fill-v 5]
-                         (sc/horizontal-panel :items ["Unique ID: " unique-id-text [:fill-h 10]
-                                                      "Position: " position-text [:fill-h 10]])
+                         (sc/horizontal-panel :items ["Unique ID: " unique-id-text
+                                                      [:fill-h 10]
+                                                      "Position: " position-text])
                          [:fill-v 5]
                          (sc/horizontal-panel :items ["Covered Arc (CA): " covered-arc-text
+                                                      [:fill-h 10]
                                                       "Turret Covered Arc (TCA):" turret-covered-arc-text])
                          [:fill-v 5]
                          (sc/horizontal-panel :items [add-to-setup-button :fill-h remove-last-from-setup-button])

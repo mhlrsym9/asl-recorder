@@ -68,10 +68,13 @@
                      "DEFENDER Rout" {:next-sub-phase nil :transition-fn #'transition-to-advance :open-file-fn #'transition-to-defender-rout}})
 
 (defn create-initial-setup-xml [initial-setup]
-  (doall (for [{:keys [unique-id position covered-arc]} initial-setup]
-           (xml/element :setup (merge {:unique-id unique-id :position position}
+  (doall (for [{:keys [nationality counter unique-id position covered-arc turret-covered-arc]} initial-setup]
+           (xml/element :setup (merge {:nationality nationality :counter counter
+                                       :unique-id unique-id :position position}
                                       (when-not (str/blank? covered-arc)
-                                        {:covered-arc covered-arc}))))))
+                                        {:covered-arc covered-arc})
+                                      (when-not (str/blank? turret-covered-arc)
+                                        {:turret-covered-arc turret-covered-arc}))))))
 
 (defn create-game-start-xml [name rule-set number-turns sides orientation direction map-rows]
   (xml/element :game {}

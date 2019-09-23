@@ -82,7 +82,10 @@
    :map-configuration   (map/extract-map-configuration (:map-configuration @panel-map))
    :side-configuration  (let [initial-setup-oobs (extract-initial-setup-oobs)
                               initial-setups (map-indexed (fn [idx itm] (is/extract-initial-setup itm idx)) (:initial-setup @panel-map))
-                              side-setups (map #({:side-name (:side-name %1) :initial-setup %2}) initial-setup-oobs initial-setups)]
+                              side-setups (map (fn [oob setup]
+                                                 {:side-name (:side-name oob) :initial-setup setup})
+                                               initial-setup-oobs
+                                               initial-setups)]
                           (map (fn [{:keys [side-name] :as sc}] (assoc sc :initial-setup
                                                                           (apply concat (map :initial-setup
                                                                                              (filter #(= side-name (:side-name %))
